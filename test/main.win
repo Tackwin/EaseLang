@@ -1,0 +1,12 @@
+main := proc (int argc, strings argv) -> int {
+	x : int = 5;
+
+	if x && 1 > 5 && 2 {
+		print("Bite");
+	} else {
+		print("Vagin");
+	}
+
+	print("Hello");
+	return 0;
+};

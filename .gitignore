@@ -1,0 +1,7 @@
+.vs/
+.vscode/
+ease_build/
+*.exe
+*.ilk
+*.pdb
+*.sln

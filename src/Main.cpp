@@ -1,0 +1,44 @@
+#include <stdio.h>
+
+#include "File.hpp"
+#include "Tokenizer.hpp"
+#include "Expression.hpp"
+#include "Interpreter.hpp"
+
+#include "Lib/magic_enum.hpp"
+
+int main(int argc, char** argv) noexcept {
+
+	if (argc < 2) {
+		printf("Please input a file to compîle.\n");
+		return 0;
+	}
+
+	auto path = argv[1];
+
+	printf("Reading at %s\n", path);
+
+	auto file = read_whole_text(path);
+
+	printf("%s\n", file.c_str());
+
+	auto tokens = tokenize(file);
+
+	size_t i = 0;
+	for (auto& x : tokens) {
+		printf("%zu, %s ", i++, magic_enum::enum_name(x.type).data());
+		printf("[%zu; %zu] %.*s\n", x.line, x.col, (int)x.lexeme.size, &file[x.lexeme.i]);
+	}
+
+	auto exprs = parse(tokens, file);
+	printf("Parsed\n");
+
+	for (auto& x : exprs.nodes) if (x.kind && x->depth == 0)
+		printf("%s;\n", x->string(file, exprs).c_str());
+
+	Interpreter interpreter;
+
+	for (auto& x : exprs.nodes) interpreter.print_value(interpreter.interpret(x, file));
+
+	return 0;
+}
