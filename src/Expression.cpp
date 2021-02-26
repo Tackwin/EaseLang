@@ -30,7 +30,6 @@ struct Parser_State {
 	};
 
 	#define ast_return {\
-	current_depth--;\
 	auto x_idx = exprs.nodes.size();\
 	exprs.nodes.emplace_back(x);\
 	return x_idx;\
@@ -40,6 +39,7 @@ struct Parser_State {
 		Expressions::Return_Call x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::Return)) return 0;
 		i++;
@@ -54,6 +54,7 @@ struct Parser_State {
 		Expressions::Argument x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (type_is(Token::Type::Identifier)) {
 			x.identifier = tokens[i++];
@@ -118,6 +119,7 @@ struct Parser_State {
 		Expressions::Function_Call x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::Identifier)) return 0;
 		x.identifier = tokens[i++];
@@ -141,6 +143,7 @@ struct Parser_State {
 		Expressions::Return_Parameter x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::Identifier)) return 0;
 		x.type = tokens[i++];
@@ -152,6 +155,7 @@ struct Parser_State {
 		Expressions::Parameter x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::Identifier)) return 0;
 		x.type = tokens[i++];
@@ -165,6 +169,7 @@ struct Parser_State {
 		Expressions::Function_Definition x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::Proc)) return 0;
 		i++;
@@ -210,6 +215,7 @@ struct Parser_State {
 		Expressions::If x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::If)) return 0;
 		i++;
@@ -254,6 +260,7 @@ struct Parser_State {
 		Expressions::Litteral x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::String)) return 0;
 		x.token = tokens[i++];
@@ -265,6 +272,7 @@ struct Parser_State {
 		Expressions::Litteral x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::Number)) return 0;
 		x.token = tokens[i++];
@@ -287,6 +295,7 @@ struct Parser_State {
 		Expressions::Assignement x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		x.identifier = tokens[i++];
 		if (!type_is(Token::Type::Colon)) return 0;
@@ -304,6 +313,11 @@ struct Parser_State {
 	};
 	#define TT Token::Type
 	size_t expression() noexcept {
+		Expressions::Expression x;
+		x.scope = current_scope;
+		x.depth = current_depth++;
+		defer { current_depth--; };
+
 		std::vector<std::initializer_list<TT>> least_to_most_precedent = {
 			{ TT::Or, TT::And }, { TT::Eq, TT::Neq }, { TT::Gt, TT::Geq, TT::Lt, TT::Geq }
 		};
@@ -314,21 +328,20 @@ struct Parser_State {
 			auto func = [&, it, ops = least_to_most_precedent[it]] () -> size_t {
 				Expressions::Operation_List x;
 				x.scope = current_scope;
-				x.depth = current_depth++;
+				x.depth = current_depth;
 
 				std::function<size_t(void)> f =
 					(it + 1 == sub_expr.size()) ? [&] { return factor(); } : sub_expr[it+1];
 
 				x.operand_idx = f();
 
-
-				size_t idx = x.operand_idx;
-
-				if    (!type_is_any(ops)) return idx;
+				if    (!type_is_any(ops)) return x.operand_idx;
 				else                      x.op = cast_to_binary_op(tokens[i].type);
 				
+				size_t idx = 0;
 				while ( type_is_any(ops) && i++) {
-					idx = exprs.nodes[idx]->next_statement = f();
+					if (!idx) idx = x.next_statement = f();
+					else      idx = exprs.nodes[idx]->next_statement = f();
 					if (!idx) return 0;
 				}
 
@@ -338,13 +351,17 @@ struct Parser_State {
 			sub_expr.push_back(func);
 		}
 
-		return sub_expr.front()();
+		x.next_statement = sub_expr.front()();
+		if (!x.next_statement) return 0;
+
+		ast_return;
 	}
 
 	size_t unary_operation() noexcept {
 		Expressions::Unary_Operation x;
-		x.depth = current_depth++;
 		x.scope = current_scope;
+		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!is_unary_op(tokens[i].type)) return 0;
 		x.op = cast_to_unary_op(tokens[i++].type);
@@ -361,10 +378,17 @@ struct Parser_State {
 
 		if (type_is(Token::Type::Open_Paran)) {
 			i++;
-			auto idx = expression();
+
+			Expressions::Expression x;
+			x.scope = current_scope;
+			x.depth = current_depth++;
+			defer { current_depth--; };
+			x.next_statement = expression();
+			if (!x.next_statement) return 0;
 			if (!type_is(Token::Type::Close_Paran)) return 0;
 			i++;
-			return idx;
+
+			ast_return;
 		}
 
 		if (is_unary_op(tokens[i].type)) return unary_operation();
@@ -378,6 +402,7 @@ struct Parser_State {
 		Expressions::Identifier x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
+		defer { current_depth--; };
 
 		if (!type_is(Token::Type::Identifier)) return 0;
 		x.token = tokens[i++];

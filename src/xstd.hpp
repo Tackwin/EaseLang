@@ -18,3 +18,17 @@ static std::string string_from_view(std::string_view src, View view) noexcept {
 	memcpy(str.data(), &src[view.i], view.size);
 	return str;
 }
+
+namespace details {
+	template<typename Callable>
+	struct Defer {
+		~Defer() noexcept { todo(); }
+		Defer(Callable todo) noexcept : todo(todo) {};
+	private:
+		Callable todo;
+	};
+};
+
+#define CONCAT_(x, y) x##y
+#define CONCAT(x, y) CONCAT_(x, y)
+#define defer details::Defer CONCAT(defer_, __COUNTER__) = [&]

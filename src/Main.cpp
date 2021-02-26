@@ -38,7 +38,8 @@ int main(int argc, char** argv) noexcept {
 
 	Interpreter interpreter;
 
-	for (auto& x : exprs.nodes) interpreter.print_value(interpreter.interpret(x, file));
+	for (size_t i = 1; i < exprs.nodes.size(); ++i) if (exprs.nodes[i]->depth == 0)
+		interpreter.print_value(interpreter.interpret(exprs.nodes, i, file));
 
 	return 0;
 }

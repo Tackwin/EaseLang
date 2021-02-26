@@ -22,6 +22,12 @@ struct Expressions {
 		size_t next_statement = 0;
 	};
 
+	struct Expression : Statement {
+		virtual std::string string(std::string_view str, const Expressions& expr) const noexcept {
+			return expr.nodes[next_statement]->string(str, expr);
+		}
+	};
+
 	struct Assignement : Statement {
 		Token identifier;
 		std::optional<Token> type_identifier = std::nullopt;
@@ -85,31 +91,6 @@ struct Expressions {
 		}
 	};
 
-
-
-	struct Binary_Operations : Statement {
-		Operator op;
-		size_t operands_idx = 0;
-
-		virtual std::string string(
-			std::string_view file, const Expressions& expressions
-		) const noexcept override {
-			std::string res;
-
-			size_t idx = operands_idx;
-			res += expressions.nodes[idx]->string(file, expressions) + " ";
-			idx = expressions.nodes[idx]->next_statement;
-
-			while (idx) {
-				res += op_to_string(op);
-				res += " " + expressions.nodes[idx]->string(file, expressions);
-				idx = expressions.nodes[idx]->next_statement;
-			}
-
-			return res;
-		}
-	};
-
 	struct Operation_List : Statement {
 		size_t operand_idx = 0;
 		Operator op = Operator::Null;
@@ -119,10 +100,10 @@ struct Expressions {
 		) const noexcept override {
 			std::string res;
 
-			size_t idx = operand_idx;
-			res = expressions.nodes[idx]->string(file, expressions);
+			res = expressions.nodes[operand_idx]->string(file, expressions);
 
-			while ((idx = expressions.nodes[idx]->next_statement)) {
+			size_t idx = 0;
+			while ((idx = (!idx ? next_statement : expressions.nodes[idx]->next_statement))) {
 				res += " ";
 				res += op_to_string(op);
 				res += " " + expressions.nodes[idx]->string(file, expressions);
@@ -324,6 +305,7 @@ struct Expressions {
 	#define LIST_AST_TYPE\
 		X(Parameter          )\
 		X(Argument           )\
+		X(Expression         )\
 		X(Return_Parameter   )\
 		X(Assignement        )\
 		X(Identifier         )\
@@ -331,7 +313,6 @@ struct Expressions {
 		X(Function_Call      )\
 		X(Operation_List     )\
 		X(Unary_Operation    )\
-		X(Binary_Operations  )\
 		X(Return_Call        )\
 		X(If                 )\
 		X(Function_Definition)
