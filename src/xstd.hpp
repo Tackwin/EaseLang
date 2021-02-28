@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <chrono>
+#include <stdio.h>
+#include <string.h>
 #include <string_view>
 #define println(x, ...) printf(x "\n", __VA_ARGS__)
 
