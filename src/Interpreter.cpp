@@ -8,16 +8,16 @@
 std::any Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx];
 	switch (node.kind) {
-	case node.Identifier_Kind:          return identifier   (nodes, idx, file);
-	case node.Assignement_Kind:         return assignement  (nodes, idx, file);
-	case node.Litteral_Kind:            return litteral     (nodes, idx, file);
-	case node.Operation_List_Kind:      return list_op      (nodes, idx, file);
-	case node.Unary_Operation_Kind:     return unary_op     (nodes, idx, file);
-	case node.Expression_Kind:          return expression   (nodes, idx, file);
-	case node.Function_Definition_Kind: return function     (nodes, idx, file);
-	case node.If_Kind:                  return if_call      (nodes, idx, file);
-	case node.Function_Call_Kind:       return function_call(nodes, idx, file);
-	case node.Return_Call_Kind:         return return_call  (nodes, idx, file);
+	case Expressions::AST_Node::Identifier_Kind:          return identifier   (nodes, idx, file);
+	case Expressions::AST_Node::Assignement_Kind:         return assignement  (nodes, idx, file);
+	case Expressions::AST_Node::Litteral_Kind:            return litteral     (nodes, idx, file);
+	case Expressions::AST_Node::Operation_List_Kind:      return list_op      (nodes, idx, file);
+	case Expressions::AST_Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, file);
+	case Expressions::AST_Node::Expression_Kind:          return expression   (nodes, idx, file);
+	case Expressions::AST_Node::Function_Definition_Kind: return function     (nodes, idx, file);
+	case Expressions::AST_Node::If_Kind:                  return if_call      (nodes, idx, file);
+	case Expressions::AST_Node::Function_Call_Kind:       return function_call(nodes, idx, file);
+	case Expressions::AST_Node::Return_Call_Kind:         return return_call  (nodes, idx, file);
 	default:                        return nullptr;
 	}
 }
@@ -197,7 +197,7 @@ std::any Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view fil
 		auto& param = nodes[idx].Parameter_;
 		
 		if (string_from_view(file, param.type.lexeme) != "int") {
-			println("Don't support anything else than intsry :(.");
+			printlns("Don't support anything else than intsry :(.");
 			return nullptr;
 		}
 
@@ -272,10 +272,15 @@ std::any Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view fil
 	auto view = node.token.lexeme;
 
 	if (node.token.type == Token::Type::Number) {
+		// When will libc++ and libstdc++ implement from_char :'(
+/*
 		long double x = 0;
 		auto res = std::from_chars(file.data() + view.i, file.data() + view.i + view.size, x);
-
 		if (res.ec == std::errc::invalid_argument) return nullptr;
+*/
+		std::string temp(file.data() + view.i, view.size);
+		char* end_ptr;
+		long double x = std::strtold(temp.c_str(), &end_ptr);
 		return x;
 	}
 
@@ -292,7 +297,7 @@ std::any Interpreter::expression(AST_Nodes nodes, size_t idx, std::string_view f
 
 void Interpreter::print_value(const std::any& value) noexcept {
 	if (typecheck<std::nullptr_t>(value)) {
-		println("RIP F in the chat for my boiii");
+		printlns("RIP F in the chat for my boiii");
 		return;
 	}
 

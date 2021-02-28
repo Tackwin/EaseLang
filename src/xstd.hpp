@@ -5,6 +5,7 @@
 #include <string.h>
 #include <string_view>
 #define println(x, ...) printf(x "\n", __VA_ARGS__)
+#define printlns(x) printf(x "\n")
 
 struct View {
 	size_t i = 0;
