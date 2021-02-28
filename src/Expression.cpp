@@ -44,7 +44,7 @@ struct Parser_State {
 		if (!type_is(Token::Type::Return)) return 0;
 		i++;
 
-		x.return_value_idx = litteral();
+		x.return_value_idx = expression();
 		if (!x.return_value_idx) return 0;
 
 		ast_return;
@@ -56,12 +56,8 @@ struct Parser_State {
 		x.depth = current_depth++;
 		defer { current_depth--; };
 
-		if (type_is(Token::Type::Identifier)) {
-			x.identifier = tokens[i++];
-		} else if (type_is(Token::Type::String)) {
-			x.value_idx = litteral();
-			if (!x.value_idx) return 0;
-		} else return 0;
+		x.value_idx = expression();
+		if (!x.value_idx) return 0;
 
 		ast_return;
 	};
@@ -312,49 +308,45 @@ struct Parser_State {
 		ast_return;
 	};
 	#define TT Token::Type
-	size_t expression() noexcept {
-		Expressions::Expression x;
+
+	size_t expression_helper(
+		const std::vector<std::initializer_list<TT>>& ops,
+		size_t it
+	) noexcept {
+		Expressions::Operation_List x;
 		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		x.depth = current_depth;
 
-		std::vector<std::initializer_list<TT>> least_to_most_precedent = {
-			{ TT::Or, TT::And }, { TT::Eq, TT::Neq }, { TT::Gt, TT::Geq, TT::Lt, TT::Geq }
-		};
+		if (it + 1 == ops.size()) x.operand_idx = factor();
+		else                      x.operand_idx = expression_helper(ops, it + 1);
 
-		std::vector<std::function<size_t(void)>> sub_expr;
-		for (size_t it = 0; it < least_to_most_precedent.size(); ++it) {
 
-			auto func = [&, it, ops = least_to_most_precedent[it]] () -> size_t {
-				Expressions::Operation_List x;
-				x.scope = current_scope;
-				x.depth = current_depth;
+		if (!type_is_any(ops[it])) return x.operand_idx;
+		else                       x.op = cast_to_binary_op(tokens[i].type);
+		
+		size_t idx = 0;
+		while ( type_is_any(ops[it]) && i++) {
+			size_t t;
+			if (it + 1 == ops.size())  t = factor();
+			else                       t = expression_helper(ops, it + 1);
 
-				std::function<size_t(void)> f =
-					(it + 1 == sub_expr.size()) ? [&] { return factor(); } : sub_expr[it+1];
-
-				x.operand_idx = f();
-
-				if    (!type_is_any(ops)) return x.operand_idx;
-				else                      x.op = cast_to_binary_op(tokens[i].type);
-				
-				size_t idx = 0;
-				while ( type_is_any(ops) && i++) {
-					if (!idx) idx = x.next_statement = f();
-					else      idx = exprs.nodes[idx]->next_statement = f();
-					if (!idx) return 0;
-				}
-
-				ast_return;
-			};
-
-			sub_expr.push_back(func);
+			if (!idx) idx = x.next_statement = t;
+			else      idx = exprs.nodes[idx]->next_statement = t;
+			if (!idx) return 0;
 		}
 
-		x.next_statement = sub_expr.front()();
-		if (!x.next_statement) return 0;
-
 		ast_return;
+	}
+
+	size_t expression() noexcept {
+		std::vector<std::initializer_list<TT>> least_to_most_precedent = {
+			{ TT::Or, TT::And },
+			{ TT::Eq, TT::Neq },
+			{ TT::Gt, TT::Geq, TT::Lt, TT::Leq },
+			{ TT::Plus, TT::Minus }
+		};
+
+		return expression_helper(least_to_most_precedent, 0);
 	}
 
 	size_t unary_operation() noexcept {
@@ -383,8 +375,8 @@ struct Parser_State {
 			x.scope = current_scope;
 			x.depth = current_depth++;
 			defer { current_depth--; };
-			x.next_statement = expression();
-			if (!x.next_statement) return 0;
+			x.inner_idx = expression();
+			if (!x.inner_idx) return 0;
 			if (!type_is(Token::Type::Close_Paran)) return 0;
 			i++;
 

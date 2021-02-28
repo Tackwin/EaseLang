@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
+#include <chrono>
+#include <string_view>
 #define println(x, ...) printf(x "\n", __VA_ARGS__)
 
 struct View {
@@ -18,6 +20,9 @@ static std::string string_from_view(std::string_view src, View view) noexcept {
 	memcpy(str.data(), &src[view.i], view.size);
 	return str;
 }
+static std::string_view string_view_from_view(std::string_view src, View view) noexcept {
+	return std::string_view(src.data() + view.i, view.size);
+}
 
 namespace details {
 	template<typename Callable>
@@ -28,6 +33,16 @@ namespace details {
 		Callable todo;
 	};
 };
+
+static double seconds() noexcept {
+	auto now     = std::chrono::system_clock::now();
+	auto epoch   = now.time_since_epoch();
+	auto seconds = std::chrono::duration_cast<std::chrono::nanoseconds>(epoch);
+
+	// return the number of seconds
+	return seconds.count() / 1'000'000'000.0;
+}
+
 
 #define CONCAT_(x, y) x##y
 #define CONCAT(x, y) CONCAT_(x, y)

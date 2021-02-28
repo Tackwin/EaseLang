@@ -23,8 +23,10 @@ struct Expressions {
 	};
 
 	struct Expression : Statement {
+		size_t inner_idx = 0;
+
 		virtual std::string string(std::string_view str, const Expressions& expr) const noexcept {
-			return expr.nodes[next_statement]->string(str, expr);
+			return expr.nodes[inner_idx]->string(str, expr);
 		}
 	};
 
@@ -162,15 +164,7 @@ struct Expressions {
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
 			std::string res = "return ";
-
-			auto idx = return_value_idx;
-
-			while(idx) {
-				res += expressions.nodes[idx]->string(file, expressions);
-				idx = expressions.nodes[idx]->next_statement;
-				if (idx) res += ", ";
-			}
-
+			res += expressions.nodes[return_value_idx]->string(file, expressions);
 			return res;
 		}
 	};
@@ -223,20 +217,13 @@ struct Expressions {
 	};
 
 	struct Argument : Statement {
-
-		// This is XOR either one or the other not both.
-		std::optional<Token> identifier;
 		size_t value_idx = 0;
 
 		// Gather all the keyword lol
 		virtual std::string string(
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
-			if (identifier) {
-				return string_from_view(file, identifier->lexeme);
-			} else {
-				return expressions.nodes[value_idx]->string(file, expressions);
-			}
+			return expressions.nodes[value_idx]->string(file, expressions);
 		}
 	};
 

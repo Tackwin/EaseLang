@@ -8,6 +8,11 @@
 #include "Lib/magic_enum.hpp"
 
 int main(int argc, char** argv) noexcept {
+	auto t1 = seconds();
+	defer {
+		auto t2 = seconds();
+		println("%f seconds elapsed.", t2 - t1);
+	};
 
 	if (argc < 2) {
 		printf("Please input a file to compîle.\n");
