@@ -7,17 +7,19 @@ clang++ Build.cpp -o Build.exe -std=c++17
 EASE_WATCH_ME;
 
 Build build(Flags flags) noexcept {
-	if (flags.generate_debug) {
+	if (Env::Win32 && flags.generate_debug) {
 		flags.no_default_lib = true;
 	}
 
 	auto b = Build::get_default(flags);
 	b.name = "EaseLang";
+	// for g++ people :eyes
+	// b.compiler = "g++";
 
 	b.add_source_recursively("src/");
 
 	b.no_warnings_win32();
-	if (flags.generate_debug) {
+	if (Env::Win32 && flags.generate_debug) {
 		b.add_debug_defines();
 		b.add_library("msvcrtd");
 		b.add_library("ucrtd");

@@ -5,4 +5,4 @@ fib := proc (int x) -> int {
 	return fib(x - 1) + fib(x - 2);
 };
 
-fib(20);
+fib(30);
