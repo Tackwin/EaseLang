@@ -3,6 +3,7 @@
 #include <any>
 #include <stack>
 #include <vector>
+#include <functional>
 #include <string_view>
 #include <unordered_map>
 #include "Expression.hpp"
@@ -21,6 +22,10 @@ struct Interpreter {
 		std::vector<std::string> return_types;
 
 		size_t start_idx = 0;
+	};
+
+	struct Builtin {
+		std::function<std::any(std::vector<std::any>)> f;
 	};
 
 	struct Return_Call {
@@ -56,6 +61,8 @@ struct Interpreter {
 	bool typecheck(const std::any& value) noexcept {
 		return value.type() == typeid(std::decay_t<T>);
 	}
+
+	void push_builtin() noexcept;
 
 	Interpreter() noexcept { push_scope(); limit_scope.push(0); }
 };

@@ -219,6 +219,14 @@ std::any Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vie
 	auto& node = nodes[idx].Function_Call_;
 
 	auto id = lookup(string_view_from_view(file, node.identifier.lexeme));
+	if (typecheck<Builtin>(id)) {
+		std::vector<std::any> args;
+		for (size_t idx = node.argument_list_idx, i = 0; idx; idx = nodes[idx]->next_statement, i++) {
+			auto& param = nodes[idx].Argument_;
+			args.push_back(interpret(nodes, param.value_idx, file));
+		}
+		return std::any_cast<Builtin>(id).f(std::move(args));
+	}
 	if (!typecheck<Function_Definition>(id)) return nullptr;
 
 	auto f = std::any_cast<Function_Definition>(id);
@@ -329,3 +337,19 @@ std::any Interpreter::lookup(std::string_view id) noexcept {
 
 void Interpreter::push_scope() noexcept { variables.emplace_back(); }
 void Interpreter::pop_scope()  noexcept { variables.pop_back(); }
+
+
+void Interpreter::push_builtin() noexcept {
+	Builtin print;
+	print.f = [&] (std::vector<std::any> values) -> std::any {
+		for (auto& x : values) {
+			if (typecheck<long double>(x)) printf("%Lf", std::any_cast<long double>(x));
+			else if (typecheck<std::string>(x)) printf("%s", std::any_cast<std::string>(x).c_str());
+			else printf("Unsupported type to print (%s)", x.type().name());
+			printf("\n");
+		}
+
+		return nullptr;
+	};
+	variables.back()["print"] = print;
+}

@@ -1,4 +1,4 @@
-main := proc (int argc, strings argv) -> int {
+main := proc () -> int {
 	x : int = 5;
 
 	if x > 2 {
@@ -10,3 +10,5 @@ main := proc (int argc, strings argv) -> int {
 	print("Hello");
 	return 0;
 };
+
+main();

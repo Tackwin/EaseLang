@@ -91,6 +91,7 @@ struct Parser_State {
 			case Token::Type::Neq:   return Expressions::Operator::Neq;
 			case Token::Type::And:   return Expressions::Operator::And;
 			case Token::Type::Or:    return Expressions::Operator::Or;
+			case Token::Type::Dot:  return Expressions::Operator::Dot;
 			default: return Expressions::Operator::And;
 		}
 	}
@@ -107,6 +108,7 @@ struct Parser_State {
 			case Token::Type::Neq:   return true;
 			case Token::Type::And:   return true;
 			case Token::Type::Or:    return true;
+			case Token::Type::Dot:   return true;
 			default: return false;
 		}
 	}
@@ -279,13 +281,40 @@ struct Parser_State {
 	size_t litteral() noexcept {
 
 		if (type_is(Token::Type::Proc))       return function_definition();
+		if (type_is(Token::Type::Struct))     return struct_definition();
 		if (type_is(Token::Type::String))     return string_litteral();
 		if (type_is(Token::Type::Number))     return number_litteral();
 
 		return 0;
 	};
 
+	size_t struct_definition() noexcept {
+		Expressions::Struct_Definition x;
+		x.scope = current_scope;
+		x.depth = current_depth++;
+		defer { current_depth--; };
 
+		if (!type_is(Token::Type::Struct)) return 0;
+		i++;
+
+		if (!type_is(Token::Type::Open_Brace)) return 0;
+		i++;
+
+		size_t idx = 0;
+		while (!type_is(Token::Type::Close_Brace)) {
+			if (!idx) x.struct_line_idx = idx = assignement();
+			else      idx = exprs.nodes[idx]->next_statement = assignement();
+			if (!idx) break;
+			
+			if (!type_is(Token::Type::Semicolon)) return 0;
+			i++;
+		}
+
+		if (!type_is(Token::Type::Close_Brace)) return 0;
+		i++;
+
+		ast_return;
+	}
 
 	size_t assignement() noexcept {
 		Expressions::Assignement x;
@@ -343,7 +372,8 @@ struct Parser_State {
 			{ TT::Or, TT::And },
 			{ TT::Eq, TT::Neq },
 			{ TT::Gt, TT::Geq, TT::Lt, TT::Leq },
-			{ TT::Plus, TT::Minus }
+			{ TT::Plus, TT::Minus },
+			{ TT::Dot }
 		};
 
 		return expression_helper(least_to_most_precedent, 0);
@@ -364,9 +394,40 @@ struct Parser_State {
 		ast_return;
 	}
 
+	size_t initializer_list() noexcept {
+		Expressions::Initializer_List x;
+		x.scope = current_scope;
+		x.depth = current_depth++;
+		defer { current_depth--; };
+
+		if (type_is(Token::Type::Identifier)) x.type_identifier = tokens[i++];
+
+		if (!type_is(Token::Type::Open_Brace)) return 0;
+		i++;
+
+
+		size_t idx = 0;
+		while (!type_is(Token::Type::Close_Brace)) {
+			if (!idx) idx = x.expression_list_idx = expression();
+			else      idx = exprs.nodes[idx]->next_statement = expression();
+			if (!idx) return 0;
+
+			if (!type_is(Token::Type::Comma)) break;
+			i++;
+		}
+
+		if (!type_is(Token::Type::Close_Brace)) return 0;
+		i++;
+
+		ast_return;
+	}
+
 	size_t factor() noexcept {
 		if (type_is(Token::Type::Identifier) && next_type_is(Token::Type::Open_Paran))
 			return function_call();
+
+		if (type_is(Token::Type::Identifier) && next_type_is(Token::Type::Open_Brace))
+			return initializer_list();
 
 		if (type_is(Token::Type::Open_Paran)) {
 			i++;

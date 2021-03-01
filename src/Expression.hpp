@@ -60,6 +60,7 @@ struct Expressions {
 		Neq,
 		And,
 		Not,
+		Dot,
 		Or
 	};
 	static const char* op_to_string(Operator x) noexcept {
@@ -75,6 +76,7 @@ struct Expressions {
 		case Operator::And:   return "&&";
 		case Operator::Or:    return "||";
 		case Operator::Not:   return "!";
+		case Operator::Dot:   return ".";
 		default: return "??";
 		}
 	}
@@ -106,9 +108,10 @@ struct Expressions {
 
 			size_t idx = 0;
 			while ((idx = (!idx ? next_statement : expressions.nodes[idx]->next_statement))) {
-				res += " ";
+				if (op != Operator::Dot) res += " ";
 				res += op_to_string(op);
-				res += " " + expressions.nodes[idx]->string(file, expressions);
+				if (op != Operator::Dot) res += " ";
+				res += expressions.nodes[idx]->string(file, expressions);
 			}
 
 			return res;
@@ -169,7 +172,45 @@ struct Expressions {
 		}
 	};
 
-	struct Function_Definition : Litteral {
+	struct Struct_Definition : Statement {
+		size_t struct_line_idx = 0;
+
+		virtual std::string string(
+			std::string_view file, const Expressions& expressions
+		) const noexcept override {
+			std::string res;
+			for (size_t idx = struct_line_idx; idx; idx = expressions.nodes[idx]->next_statement)
+				res += expressions.nodes[idx]->string(file, expressions) + ";\n";
+
+			append_tab(1, res);
+			return std::string("struct {\n") + res + "}";
+		}
+	};
+
+	struct Initializer_List : Statement {
+		std::optional<Token> type_identifier;
+		size_t expression_list_idx = 0;
+
+		virtual std::string string(
+			std::string_view file, const Expressions& expressions
+		) const noexcept override {
+			std::string res;
+			if (type_identifier) res += string_from_view(file, type_identifier->lexeme);
+			res += "{";
+
+			std::string separator = " ";
+			for (
+				size_t idx = expression_list_idx; idx; idx = expressions.nodes[idx]->next_statement
+			) {
+				res += separator + expressions.nodes[idx]->string(file, expressions);
+				separator = ", ";
+			}
+			res += " }";
+			return res;
+		}
+	};
+
+	struct Function_Definition : Statement {
 		size_t parameter_list_idx = 0;
 		size_t return_list_idx = 0;
 		size_t statement_list_idx = 0;
@@ -302,6 +343,8 @@ struct Expressions {
 		X(Unary_Operation    )\
 		X(Return_Call        )\
 		X(If                 )\
+		X(Struct_Definition  )\
+		X(Initializer_List   )\
 		X(Function_Definition)
 
 	struct AST_Node {

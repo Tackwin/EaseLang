@@ -42,6 +42,7 @@ int main(int argc, char** argv) noexcept {
 		printf("%s;\n", x->string(file, exprs).c_str());
 
 	Interpreter interpreter;
+	interpreter.push_builtin();
 
 	for (size_t i = 1; i < exprs.nodes.size(); ++i) if (exprs.nodes[i]->depth == 0)
 		interpreter.print_value(interpreter.interpret(exprs.nodes, i, file));
