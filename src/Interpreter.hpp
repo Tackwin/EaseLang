@@ -32,6 +32,13 @@ struct Interpreter {
 		std::vector<std::any> values;
 	};
 
+	struct Void {};
+
+	struct User_Struct {
+		std::vector<std::string> member_names;
+		std::vector<std::any>    member_values;
+	};
+
 	using AST_Nodes = const std::vector<Expressions::AST_Node>&;
 
 	std::any litteral     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
@@ -45,6 +52,8 @@ struct Interpreter {
 	std::any function     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any return_call  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	std::any struct_def   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	std::any init_list    (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 
 	std::any interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any interpret(
