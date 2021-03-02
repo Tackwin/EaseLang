@@ -172,25 +172,35 @@ struct Parser_State {
 		if (!type_is(Token::Type::Proc)) return 0;
 		i++;
 
-		if (!type_is(Token::Type::Open_Paran)) return 0;
-		i++;
-
 		size_t idx = 0;
-		if (!type_is(Token::Type::Close_Paran))
-			x.parameter_list_idx = idx = parameter_list();
-		while (type_is(Token::Type::Comma) && i++)
-			idx = exprs.nodes[idx]->next_statement = parameter_list();
+		if (type_is(Token::Type::Open_Paran)) {
+			i++;
 
-		if (!type_is(Token::Type::Close_Paran)) return 0;
-		i++;
+			if (!type_is(Token::Type::Close_Paran))
+				x.parameter_list_idx = idx = parameter_list();
+			while (type_is(Token::Type::Comma) && i++)
+				idx = exprs.nodes[idx]->next_statement = parameter_list();
 
-		if (!type_is(Token::Type::Arrow)) return 0;
-		i++;
+			if (!type_is(Token::Type::Close_Paran)) return 0;
+			i++;
+		}
 
-		if (!type_is(Token::Type::Close_Paran))
-			x.return_list_idx = idx = return_list();
-		while (type_is(Token::Type::Comma) && i++)
-			idx = exprs.nodes[idx]->next_statement = return_list();
+		if (type_is(Token::Type::Arrow)) {
+			i++;
+
+			if (type_is(Token::Type::Open_Paran)) {
+				i++;
+
+				if (!type_is(Token::Type::Close_Paran))
+					x.return_list_idx = idx = return_list();
+				while (type_is(Token::Type::Comma) && i++)
+					idx = exprs.nodes[idx]->next_statement = return_list();
+				if (!type_is(Token::Type::Close_Paran)) return 0;
+				i++;
+			} else if (type_is(Token::Type::Identifier)) {
+				x.return_list_idx = return_list();
+			}
+		}
 
 		if (!type_is(Token::Type::Open_Brace)) return 0;
 		i++;

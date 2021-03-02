@@ -3,12 +3,10 @@ vector2 := struct {
 	y := 0;
 };
 
-test := proc () -> void {
+main := proc {
 	vec2 := vector2{ 1, 2 };
 	vec1 : vector2 = vec2;
 	print("Test {", vec1.x, vec1.y, "}");
 };
 
-test();
-
-1 + 3 + 2;
+main();

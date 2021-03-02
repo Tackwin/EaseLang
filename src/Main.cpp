@@ -28,7 +28,7 @@ int main(int argc, char** argv) noexcept {
 	printf("%s\n", file.c_str());
 
 	auto tokens = tokenize(file);
-
+ 
 	size_t i = 0;
 	for (auto& x : tokens) {
 		printf("%zu, %s ", i++, magic_enum::enum_name(x.type).data());
@@ -43,6 +43,7 @@ int main(int argc, char** argv) noexcept {
 
 	Interpreter interpreter;
 	interpreter.push_builtin();
+	interpreter.variables.reserve(100000);
 
 	for (size_t i = 1; i < exprs.nodes.size(); ++i) if (exprs.nodes[i]->depth == 0)
 		interpreter.print_value(interpreter.interpret(exprs.nodes, i, file));

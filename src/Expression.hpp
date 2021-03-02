@@ -219,19 +219,24 @@ struct Expressions {
 		virtual std::string string(
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
-			std::string res = "proc (";
+			std::string res = "proc";
 
-			auto idx = parameter_list_idx;
+			size_t idx = 0;
+			if (parameter_list_idx) {
+				res += " (";
 
-			while(idx) {
-				res += expressions.nodes[idx]->string(file, expressions);
-				idx = expressions.nodes[idx]->next_statement;
-				if (idx) res += ", ";
+				idx = parameter_list_idx;
+
+				while(idx) {
+					res += expressions.nodes[idx]->string(file, expressions);
+					idx = expressions.nodes[idx]->next_statement;
+					if (idx) res += ", ";
+				}
+				res += ")";
 			}
-			res += ")";
 			
 			if (return_list_idx) {
-				res += " -> ";
+				res += " -> (";
 			}
 
 			idx = return_list_idx;
@@ -241,6 +246,7 @@ struct Expressions {
 				if (idx) res += ", ";
 			}
 
+			if (return_list_idx) res += ")";
 			res += " {\n";
 
 			idx = statement_list_idx;

@@ -18,6 +18,8 @@ std::any Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view fi
 	case Expressions::AST_Node::If_Kind:                  return if_call      (nodes, idx, file);
 	case Expressions::AST_Node::Function_Call_Kind:       return function_call(nodes, idx, file);
 	case Expressions::AST_Node::Return_Call_Kind:         return return_call  (nodes, idx, file);
+	case Expressions::AST_Node::Struct_Definition_Kind:   return struct_def   (nodes, idx, file);
+	case Expressions::AST_Node::Initializer_List_Kind:    return init_list    (nodes, idx, file);
 	default:                        return nullptr;
 	}
 }
@@ -36,9 +38,47 @@ std::any Interpreter::interpret(
 		if (typecheck<Return_Call>(v)) break;
 	}
 
-	if (!typecheck<Return_Call>(v)) return nullptr;
+	if (!typecheck<Return_Call>(v) && !f.return_types.empty()) {
+		printlns("Reached end of non void returning function.");
+		return nullptr;
+	}
+	if (!typecheck<Return_Call>(v)) return Void();
 	auto r = std::any_cast<Return_Call>(v);
+	if (r.values.size() != f.return_types.size()) {
+		println(
+			"Trying to return from a function with wrong number of return parameters, "
+			"expected %zu got %zu.", f.return_types.size(), r.values.size()
+		);
+		return nullptr;
+	}
+
 	return r.values.empty() ? nullptr : r.values.front();
+}
+
+std::any Interpreter::init_list(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+	auto& node = nodes[idx].Initializer_List_;
+
+	if (node.type_identifier) {
+		auto type_name = string_view_from_view(file, node.type_identifier->lexeme);
+		auto type = lookup(type_name);
+		if (!typecheck<User_Struct>(type)) {
+			println("Error expected UserStruct got %s.", type.type().name());
+			return nullptr;
+		}
+
+		auto user_struct = std::any_cast<User_Struct>(type);
+		
+		for (
+			size_t idx = node.expression_list_idx, i = 0;
+			idx;
+			idx = nodes[idx]->next_statement, i++
+		) user_struct.member_values[i] = interpret(nodes, idx, file);
+
+		return user_struct;
+	}
+	printlns("Please specify the type explicitely.");
+
+	return nullptr;
 }
 
 std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
@@ -144,7 +184,47 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) - std::any_cast<long double>(right);
 		}
-		default: return nullptr;
+		case Expressions::Operator::Dot: {
+			auto root_struct = interpret(nodes, node.operand_idx, file);
+			if (!typecheck<User_Struct>(root_struct)) {
+				println("Expected a struct but got %s instead.", root_struct.type().name());
+				return nullptr;
+			}
+
+			auto helper =
+			[&] (const User_Struct& user_struct, size_t next, auto& helper) -> std::any {
+				auto& next_node = nodes[next];
+				if (next_node.kind != Expressions::AST_Node::Identifier_Kind) {
+					printlns("Error non identifier in the chain.");
+					return nullptr;
+				}
+
+				auto name = string_from_view(file, next_node.Identifier_.token.lexeme);
+				size_t i = 0;
+				while(i < user_struct.member_names.size() && user_struct.member_names[i] != name)
+					i++;
+
+				if (i == user_struct.member_names.size()) {
+					println("Error %s is not a member of this struct.", name.c_str());
+					return nullptr;
+				}
+
+				auto& x = user_struct.member_values[i];
+				if (typecheck<User_Struct>(x)) {
+					return helper(
+						std::any_cast<User_Struct>(x), next_node.Identifier_.next_statement, helper
+					);
+				}
+
+				return x;
+			};
+
+			return helper(std::any_cast<User_Struct>(root_struct), node.next_statement, helper);
+		}
+		default:{
+			println("Unsupported operation %s", Expressions::op_to_string(node.op));
+			return nullptr;
+		}
 	}
 }
 
@@ -188,6 +268,20 @@ std::any Interpreter::if_call(AST_Nodes nodes, size_t idx, std::string_view file
 	return nullptr;
 }
 
+std::any Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+	auto& node = nodes[idx].Struct_Definition_;
+
+	User_Struct x;
+	for (size_t idx = node.struct_line_idx; idx; idx = nodes[idx]->next_statement) {
+		auto& def = nodes[idx].Assignement_;
+		auto name = string_from_view(file, def.identifier.lexeme);
+		x.member_names.push_back(name);
+		x.member_values.push_back(interpret(nodes, def.value_idx, file));
+	}
+
+	return x;
+}
+
 std::any Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Function_Definition_;
 
@@ -229,14 +323,15 @@ std::any Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vie
 	}
 	if (!typecheck<Function_Definition>(id)) return nullptr;
 
-	auto f = std::any_cast<Function_Definition>(id);
+	auto f = std::any_cast<Function_Definition>(&id);
+	f->parameters.clear();
 	
 	for (size_t idx = node.argument_list_idx, i = 0; idx; idx = nodes[idx]->next_statement, i++) {
 		auto& param = nodes[idx].Argument_;
-		f.parameters[f.parameter_names[i]] = interpret(nodes, param.value_idx, file);
+		f->parameters[f->parameter_names[i]] = interpret(nodes, param.value_idx, file);
 	}
 
-	return interpret(nodes, f, file);
+	return interpret(nodes, *f, file);
 }
 
 std::any Interpreter::return_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
@@ -286,7 +381,10 @@ std::any Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view fil
 		auto res = std::from_chars(file.data() + view.i, file.data() + view.i + view.size, x);
 		if (res.ec == std::errc::invalid_argument) return nullptr;
 */
-		std::string temp(file.data() + view.i, view.size);
+		static std::string temp;
+		temp.clear();
+		temp.resize(view.size);
+		memcpy(temp.data(), file.data() + view.i, view.size);
 		char* end_ptr;
 		long double x = std::strtold(temp.c_str(), &end_ptr);
 		return x;
@@ -338,7 +436,6 @@ std::any Interpreter::lookup(std::string_view id) noexcept {
 void Interpreter::push_scope() noexcept { variables.emplace_back(); }
 void Interpreter::pop_scope()  noexcept { variables.pop_back(); }
 
-
 void Interpreter::push_builtin() noexcept {
 	Builtin print;
 	print.f = [&] (std::vector<std::any> values) -> std::any {
@@ -346,8 +443,10 @@ void Interpreter::push_builtin() noexcept {
 			if (typecheck<long double>(x)) printf("%Lf", std::any_cast<long double>(x));
 			else if (typecheck<std::string>(x)) printf("%s", std::any_cast<std::string>(x).c_str());
 			else printf("Unsupported type to print (%s)", x.type().name());
-			printf("\n");
+
+			printf(" ");
 		}
+		printf("\n");
 
 		return nullptr;
 	};
