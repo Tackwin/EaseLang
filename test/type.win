@@ -1,0 +1,7 @@
+main := proc () {
+	x             : int   = 0;
+	x_ptr         : int*  = 0;
+	x_cst         : int const = 0;
+	x_cst_ptr     : int const* = 0;
+	x_cst_ptr_cst : int const* const = 0;
+};

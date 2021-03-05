@@ -28,6 +28,7 @@ struct Token {
 		Neq,
 		And,
 		Or,
+		Amp,
 		Plus,
 
 		Semicolon,
@@ -37,6 +38,7 @@ struct Token {
 //		KEYWORD
 		Return,
 		Proc,
+		Const,
 		Struct,
 		If,
 		Else,

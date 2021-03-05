@@ -67,6 +67,8 @@ struct Parser_State {
 			case Token::Type::Minus: return Expressions::Operator::Minus;
 			case Token::Type::Plus:  return Expressions::Operator::Plus;
 			case Token::Type::Not:   return Expressions::Operator::Not;
+			case Token::Type::Amp:   return Expressions::Operator::Amp;
+			case Token::Type::Star:  return Expressions::Operator::Deref;
 			default: return Expressions::Operator::Minus;
 		}
 	}
@@ -75,6 +77,8 @@ struct Parser_State {
 			case Token::Type::Minus: return true;
 			case Token::Type::Plus:  return true;
 			case Token::Type::Not:   return true;
+			case Token::Type::Amp:   return true;
+			case Token::Type::Star:  return true;
 			default: return false;
 		}
 	}
@@ -91,7 +95,7 @@ struct Parser_State {
 			case Token::Type::Neq:   return Expressions::Operator::Neq;
 			case Token::Type::And:   return Expressions::Operator::And;
 			case Token::Type::Or:    return Expressions::Operator::Or;
-			case Token::Type::Dot:  return Expressions::Operator::Dot;
+			case Token::Type::Dot:   return Expressions::Operator::Dot;
 			default: return Expressions::Operator::And;
 		}
 	}
@@ -143,8 +147,8 @@ struct Parser_State {
 		x.depth = current_depth++;
 		defer { current_depth--; };
 
-		if (!type_is(Token::Type::Identifier)) return 0;
-		x.type = tokens[i++];
+		x.type_identifier = type_identifier();
+		if (!x.type_identifier) return 0;
 
 		ast_return;
 	};
@@ -155,8 +159,9 @@ struct Parser_State {
 		x.depth = current_depth++;
 		defer { current_depth--; };
 
-		if (!type_is(Token::Type::Identifier)) return 0;
-		x.type = tokens[i++];
+		x.type_identifier = type_identifier();
+		if (!x.type_identifier) return 0;
+
 		if (!type_is(Token::Type::Identifier)) return 0;
 		x.name = tokens[i++];
 
@@ -175,6 +180,7 @@ struct Parser_State {
 		size_t idx = 0;
 		if (type_is(Token::Type::Open_Paran)) {
 			i++;
+
 
 			if (!type_is(Token::Type::Close_Paran))
 				x.parameter_list_idx = idx = parameter_list();
@@ -336,7 +342,8 @@ struct Parser_State {
 		if (!type_is(Token::Type::Colon)) return 0;
 		i++;
 		if (type_is(Token::Type::Identifier)) {
-			x.type_identifier = tokens[i++];
+			x.type_identifier = type_identifier();
+			if (!x.type_identifier) return 0;
 		} else if (!type_is(Token::Type::Equal)) return 0;
 		i++;
 
@@ -410,7 +417,10 @@ struct Parser_State {
 		x.depth = current_depth++;
 		defer { current_depth--; };
 
-		if (type_is(Token::Type::Identifier)) x.type_identifier = tokens[i++];
+		if (type_is(Token::Type::Identifier)) {
+			x.type_identifier = type_identifier();
+			if (!x.type_identifier) return 0;
+		}
 
 		if (!type_is(Token::Type::Open_Brace)) return 0;
 		i++;
@@ -460,6 +470,44 @@ struct Parser_State {
 		return litteral();
 	}
 	#undef TT
+
+	size_t type_identifier() noexcept {
+		size_t prev_depth = current_depth;
+		Expressions::Type_Identifier x;
+		x.scope = current_scope;
+		x.depth = current_depth++;
+		defer { current_depth = prev_depth; };
+
+		// always start with an identifier.
+		if (!type_is(Token::Type::Identifier)) return 0;
+		x.identifier = tokens[i++];
+
+		// then we can have arbitrary nested combinations of const and *
+		// every time we have a *, it means there is an indirection. We push our current
+		// Type_Identifier and we construct a new one with it's pointer_to pointing to the index
+		// of the just pushed Type_Identifier.
+
+		while (type_is_any({ Token::Type::Const, Token::Type::Star })) {
+			if (type_is(Token::Type::Const)) {
+				i++;
+				x.is_const = true;
+			}
+
+			if (type_is(Token::Type::Star)) {
+				i++;
+
+				auto x_idx = exprs.nodes.size();
+				exprs.nodes.push_back(std::move(x));
+				x = Expressions::Type_Identifier();
+				x.scope = current_scope;
+				x.depth = current_depth++;
+
+				x.pointer_to = x_idx;
+			}
+		}
+
+		ast_return;
+	}
 
 	size_t identifier() noexcept {
 		Expressions::Identifier x;

@@ -32,7 +32,7 @@ struct Expressions {
 
 	struct Assignement : Statement {
 		Token identifier;
-		std::optional<Token> type_identifier = std::nullopt;
+		std::optional<size_t> type_identifier = std::nullopt;
 		size_t value_idx = 0;
 
 		// Gather all the keyword lol
@@ -42,7 +42,7 @@ struct Expressions {
 			std::string res;
 			res += string_from_view(file, identifier.lexeme) + " :";
 			if (type_identifier) {
-				res += " " + string_from_view(file, type_identifier->lexeme) + " ";
+				res += " " + expressions.nodes[*type_identifier]->string(file, expressions) + " ";
 			}
 			res += "= " + expressions.nodes[value_idx]->string(file, expressions);
 			return res;
@@ -60,6 +60,8 @@ struct Expressions {
 		Neq,
 		And,
 		Not,
+		Amp,
+		Deref,
 		Dot,
 		Or
 	};
@@ -77,6 +79,8 @@ struct Expressions {
 		case Operator::Or:    return "||";
 		case Operator::Not:   return "!";
 		case Operator::Dot:   return ".";
+		case Operator::Amp:   return "&";
+		case Operator::Deref: return "*";
 		default: return "??";
 		}
 	}
@@ -125,6 +129,29 @@ struct Expressions {
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
 			return string_from_view(file, token.lexeme);
+		}
+	};
+
+	struct Type_Identifier : Statement {
+
+		Token identifier;
+		bool is_const = false;
+		std::optional<size_t> pointer_to = std::nullopt;
+
+		virtual std::string string(
+			std::string_view file, const Expressions& expressions
+		) const noexcept override {
+			std::string res = "";
+			
+			if (pointer_to) {
+				res = expressions.nodes[*pointer_to]->string(file, expressions);
+				res += "*";
+			} else {
+				res = string_from_view(file, identifier.lexeme);
+			}
+
+			if (is_const) res += " const";
+			return res;
 		}
 	};
 
@@ -188,14 +215,15 @@ struct Expressions {
 	};
 
 	struct Initializer_List : Statement {
-		std::optional<Token> type_identifier;
+		std::optional<size_t> type_identifier;
 		size_t expression_list_idx = 0;
 
 		virtual std::string string(
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
 			std::string res;
-			if (type_identifier) res += string_from_view(file, type_identifier->lexeme);
+			if (type_identifier)
+				res += expressions.nodes[*type_identifier]->string(file, expressions);
 			res += "{";
 
 			std::string separator = " ";
@@ -275,25 +303,28 @@ struct Expressions {
 	};
 
 	struct Parameter : Statement {
-		Token type;
+		size_t type_identifier;
 		Token name;
 
 		// Gather all the keyword lol
 		virtual std::string string(
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
-			return string_from_view(file, type.lexeme) + " " + string_from_view(file, name.lexeme);
+			return 
+				expressions.nodes[type_identifier]->string(file, expressions) + " " +
+				string_from_view(file, name.lexeme);
 		}
 	};
 
+	// >TODO(Tackwin): Do i really need a class just for this ?
 	struct Return_Parameter : Statement {
-		Token type;
+		size_t type_identifier;
 
 		// Gather all the keyword lol
 		virtual std::string string(
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
-			return string_from_view(file, type.lexeme);
+			return expressions.nodes[type_identifier]->string(file, expressions);
 		}
 	};
 
@@ -348,6 +379,7 @@ struct Expressions {
 		X(Operation_List     )\
 		X(Unary_Operation    )\
 		X(Return_Call        )\
+		X(Type_Identifier    )\
 		X(If                 )\
 		X(Struct_Definition  )\
 		X(Initializer_List   )\

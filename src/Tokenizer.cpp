@@ -90,6 +90,8 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 		}
 		case '&': if (peek_is('&')) {
 			new_token.type = Token::Type::And; i += 2; break;
+		} else {
+			new_token.type = Token::Type::Amp; i += 1; break;
 		}
 		case '|': if (peek_is('|')) { new_token.type = Token::Type::Or;  i += 2; break; }
 		default:
@@ -113,12 +115,16 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 			new_token.type = Token::Type::Proc;
 			i += 4;
 		}
+		else if (string_comp(i, "const", str)) {
+			new_token.type = Token::Type::Const;
+			i += 5;
+		}
 		else if (isdigit(str[i])) {
 			new_token.type = Token::Type::Number;
 			for (; i < str.size() && isdigit(str[i]) || str[i] == '.'; i++);
 		} else if (isalpha(str[i])) {
 			new_token.type = Token::Type::Identifier;
-			for (; i < str.size() && isalnum(str[i]); ++i);
+			for (; i < str.size() && isalnum(str[i]) || str[i] == '_'; ++i);
 		} else {
 			new_token.type = Token::Type::Unknown;
 			i++;

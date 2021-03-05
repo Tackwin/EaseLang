@@ -1,0 +1,16 @@
+vect2 := struct {
+	x := 0;
+	y := 0;
+};
+
+rect2 := struct {
+	pos  := vect2{0, 0};
+	size := vect2{0, 0};
+};
+
+main := proc () {
+	r := rect2{vect2{0, 0}, vect2{1, 2}};
+	print("Rect2", r.pos.x, r.pos.y, r.size.x, r.size.y);
+};
+
+main();

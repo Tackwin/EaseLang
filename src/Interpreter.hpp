@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <any>
@@ -11,13 +12,16 @@
 // I guess you can't forward decl nested struct in c++ :)))))
 // struct Expressions { struct AST_Node; };
 struct Interpreter {
+
+	std::vector<std::any> memory;
+
 	// >PERF(Tackwin): std::string as key of unordered_map :'(
 	// Ordered from out most scope to in most scope.
-	std::vector<std::unordered_map<std::string, std::any>> variables;
+	std::vector<std::unordered_map<std::string, size_t>> variables;
 	std::stack<size_t> limit_scope;
 
 	struct Function_Definition {
-		std::unordered_map<std::string_view, std::any> parameters;
+		std::unordered_map<std::string_view, size_t> parameters;
 		std::vector<std::string_view> parameter_names;
 		std::vector<std::string> return_types;
 
@@ -25,18 +29,26 @@ struct Interpreter {
 	};
 
 	struct Builtin {
-		std::function<std::any(std::vector<std::any>)> f;
+		std::function<size_t(std::vector<size_t>)> f;
 	};
 
 	struct Return_Call {
-		std::vector<std::any> values;
+		std::vector<size_t> values;
 	};
 
 	struct Void {};
 
+	struct Identifier {
+		size_t memory_idx = 0;
+	};
+
+	struct Pointer {
+		size_t memory_idx = 0;
+	};
+
 	struct User_Struct {
 		std::vector<std::string> member_names;
-		std::vector<std::any>    member_values;
+		std::vector<size_t>      member_values;
 	};
 
 	using AST_Nodes = const std::vector<Expressions::AST_Node>&;
@@ -47,6 +59,7 @@ struct Interpreter {
 	std::any factor       (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any expression   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any identifier   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	std::any type_ident   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any assignement  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any if_call      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any function     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
@@ -61,6 +74,12 @@ struct Interpreter {
 	) noexcept;
 
 	std::any lookup(std::string_view id) noexcept;
+	size_t   lookup_addr(std::string_view id) noexcept;
+
+	size_t alloc(std::any x) noexcept;
+	std::any at(size_t idx) noexcept;
+	std::any at(Identifier id) noexcept { return at(id.memory_idx); }
+	std::any at(Pointer ptr) noexcept { return at(ptr.memory_idx); }
 	void push_scope() noexcept;
 	void pop_scope() noexcept;
 
@@ -73,5 +92,5 @@ struct Interpreter {
 
 	void push_builtin() noexcept;
 
-	Interpreter() noexcept { push_scope(); limit_scope.push(0); }
+	Interpreter() noexcept { memory.push_back(nullptr); push_scope(); limit_scope.push(0); }
 };
