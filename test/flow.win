@@ -1,5 +1,6 @@
 main := proc {
-	x := 5;
+	x := 27;
+
 	if x > 1 {
 		print("x > 1");
 	} else {
@@ -11,10 +12,14 @@ main := proc {
 	}
 
 	while x > 1 {
-		x = x / 2;
+		if x % 2 == 1 {
+			x = 3 * x + 1;
+		} else {
+			x = x / 2;
+		}
 
 		print(x);
-		sleep(1);
+		sleep(0.01);
 	}
 };
 

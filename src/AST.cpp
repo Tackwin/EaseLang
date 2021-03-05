@@ -1,5 +1,5 @@
 
-#include "Expression.hpp"
+#include "AST.hpp"
 
 #include "xstd.hpp"
 
@@ -9,14 +9,14 @@ using Tokens = const std::vector<Token>&;
 using F = std::function<size_t()>;
 
 struct Parser_State {
-	Expressions& exprs;
+	AST& exprs;
 	Tokens tokens;
 
 	size_t current_scope = 0;
 	size_t current_depth = 0;
 	size_t i             = 0;
 
-	Parser_State(Expressions& exprs, Tokens tokens) noexcept : exprs(exprs), tokens(tokens) {}
+	Parser_State(AST& exprs, Tokens tokens) noexcept : exprs(exprs), tokens(tokens) {}
 
 	bool next_type_is(Token::Type t) noexcept {
 		return i + 1 < tokens.size() && tokens[i + 1].type == t;
@@ -41,7 +41,7 @@ struct Parser_State {
 	}
 
 	size_t return_call() noexcept {
-		Expressions::Return_Call x;
+		AST::Return_Call x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -56,7 +56,7 @@ struct Parser_State {
 	}
 	
 	size_t argument_list() noexcept {
-		Expressions::Argument x;
+		AST::Argument x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -69,25 +69,25 @@ struct Parser_State {
 
 	auto cast_to_op(Token::Type x) noexcept {
 		switch(x) {
-			case Token::Type::Minus: return Expressions::Operator::Minus;
-			case Token::Type::Plus:  return Expressions::Operator::Plus;
-			case Token::Type::Not:   return Expressions::Operator::Not;
-			case Token::Type::Amp:   return Expressions::Operator::Amp;
-			case Token::Type::Star:  return Expressions::Operator::Star;
-			case Token::Type::Div:   return Expressions::Operator::Div;
-			case Token::Type::Inc:   return Expressions::Operator::Inc;
-			case Token::Type::Geq:   return Expressions::Operator::Geq;
-			case Token::Type::Gt:    return Expressions::Operator::Gt;
-			case Token::Type::Leq:   return Expressions::Operator::Leq;
-			case Token::Type::Lt:    return Expressions::Operator::Lt;
-			case Token::Type::Eq:    return Expressions::Operator::Eq;
-			case Token::Type::Neq:   return Expressions::Operator::Neq;
-			case Token::Type::Mod:   return Expressions::Operator::Mod;
-			case Token::Type::Equal: return Expressions::Operator::Assign;
-			case Token::Type::And:   return Expressions::Operator::And;
-			case Token::Type::Or:    return Expressions::Operator::Or;
-			case Token::Type::Dot:   return Expressions::Operator::Dot;
-			default: return Expressions::Operator::Minus;
+			case Token::Type::Minus: return AST::Operator::Minus;
+			case Token::Type::Plus:  return AST::Operator::Plus;
+			case Token::Type::Not:   return AST::Operator::Not;
+			case Token::Type::Amp:   return AST::Operator::Amp;
+			case Token::Type::Star:  return AST::Operator::Star;
+			case Token::Type::Div:   return AST::Operator::Div;
+			case Token::Type::Inc:   return AST::Operator::Inc;
+			case Token::Type::Geq:   return AST::Operator::Geq;
+			case Token::Type::Gt:    return AST::Operator::Gt;
+			case Token::Type::Leq:   return AST::Operator::Leq;
+			case Token::Type::Lt:    return AST::Operator::Lt;
+			case Token::Type::Eq:    return AST::Operator::Eq;
+			case Token::Type::Neq:   return AST::Operator::Neq;
+			case Token::Type::Mod:   return AST::Operator::Mod;
+			case Token::Type::Equal: return AST::Operator::Assign;
+			case Token::Type::And:   return AST::Operator::And;
+			case Token::Type::Or:    return AST::Operator::Or;
+			case Token::Type::Dot:   return AST::Operator::Dot;
+			default: return AST::Operator::Minus;
 		}
 	}
 	auto is_prefix_unary_op(Token::Type x) noexcept {
@@ -145,7 +145,7 @@ struct Parser_State {
 	};
 
 	size_t return_list() noexcept {
-		Expressions::Return_Parameter x;
+		AST::Return_Parameter x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -157,7 +157,7 @@ struct Parser_State {
 	};
 
 	size_t parameter_list() noexcept {
-		Expressions::Parameter x;
+		AST::Parameter x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -172,7 +172,7 @@ struct Parser_State {
 	};
 
 	size_t function_definition() noexcept {
-		Expressions::Function_Definition x;
+		AST::Function_Definition x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -229,7 +229,7 @@ struct Parser_State {
 	};
 
 	size_t if_condition() noexcept {
-		Expressions::If x;
+		AST::If x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -283,7 +283,7 @@ struct Parser_State {
 
 	size_t for_loop() noexcept {
 
-		Expressions::For x;
+		AST::For x;
 		x.scope = current_scope++;
 		x.depth = current_depth++;
 		defer {
@@ -332,7 +332,7 @@ struct Parser_State {
 	}
 
 	size_t while_loop() noexcept {
-		Expressions::While x;
+		AST::While x;
 		x.scope = current_scope++;
 		x.depth = current_depth++;
 		defer {
@@ -365,7 +365,7 @@ struct Parser_State {
 	}
 
 	size_t string_litteral() noexcept {
-		Expressions::Litteral x;
+		AST::Litteral x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -377,7 +377,7 @@ struct Parser_State {
 	};
 
 	size_t number_litteral() noexcept {
-		Expressions::Litteral x;
+		AST::Litteral x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -399,7 +399,7 @@ struct Parser_State {
 	};
 
 	size_t struct_definition() noexcept {
-		Expressions::Struct_Definition x;
+		AST::Struct_Definition x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -427,7 +427,7 @@ struct Parser_State {
 	}
 
 	size_t assignement() noexcept {
-		Expressions::Assignement x;
+		AST::Assignement x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -453,7 +453,7 @@ struct Parser_State {
 		const std::vector<TT>& ops,
 		size_t it
 	) noexcept {
-		Expressions::Operation_List x;
+		AST::Operation_List x;
 		x.scope = current_scope;
 		x.depth = current_depth;
 
@@ -480,18 +480,19 @@ struct Parser_State {
 
 	size_t expression() noexcept {
 		std::vector<TT> least_to_most_precedent = {
+			TT::Equal,
 			TT::Or, TT::And,
 			TT::Eq, TT::Neq,
 			TT::Gt, TT::Geq, TT::Lt, TT::Leq,
 			TT::Mod, TT::Plus, TT::Minus, TT::Star, TT::Div,
-			TT::Equal, TT::Dot
+			TT::Dot
 		};
 
 		return expression_helper(least_to_most_precedent, 0);
 	}
 
 	size_t unary_operation() noexcept {
-		Expressions::Unary_Operation x;
+		AST::Unary_Operation x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -506,7 +507,7 @@ struct Parser_State {
 	}
 
 	size_t initializer_list() noexcept {
-		Expressions::Initializer_List x;
+		AST::Initializer_List x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -542,7 +543,7 @@ struct Parser_State {
 	}
 
 	size_t postfix_operator() noexcept {
-		Expressions::Unary_Operation x;
+		AST::Unary_Operation x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -550,7 +551,7 @@ struct Parser_State {
 		x.right_idx = prefix_operator();
 		if (!is_postfix_unary_op(tokens[i].type)) {
 			if (type_is(Token::Type::Open_Paran)) {
-				Expressions::Function_Call y;
+				AST::Function_Call y;
 				y.scope = x.scope;
 				y.depth = x.depth;
 				y.identifier_idx = x.right_idx;
@@ -570,7 +571,7 @@ struct Parser_State {
 		if (type_is(Token::Type::Open_Paran)) {
 			i++;
 
-			Expressions::Expression x;
+			AST::Expression x;
 			x.scope = current_scope;
 			x.depth = current_depth++;
 			defer { current_depth--; };
@@ -595,7 +596,7 @@ struct Parser_State {
 
 	size_t type_identifier() noexcept {
 		size_t prev_depth = current_depth;
-		Expressions::Type_Identifier x;
+		AST::Type_Identifier x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth = prev_depth; };
@@ -620,7 +621,7 @@ struct Parser_State {
 
 				auto x_idx = exprs.nodes.size();
 				exprs.nodes.push_back(std::move(x));
-				x = Expressions::Type_Identifier();
+				x = AST::Type_Identifier();
 				x.scope = current_scope;
 				x.depth = current_depth++;
 
@@ -632,7 +633,7 @@ struct Parser_State {
 	}
 
 	size_t identifier() noexcept {
-		Expressions::Identifier x;
+		AST::Identifier x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -676,8 +677,8 @@ struct Parser_State {
 };
 
 
-Expressions parse(const std::vector<Token>& tokens, std::string_view file) noexcept {
-	Expressions exprs;
+AST parse(const std::vector<Token>& tokens, std::string_view file) noexcept {
+	AST exprs;
 	Parser_State parser(exprs, tokens);
 	exprs.nodes.emplace_back(nullptr);
 

@@ -2,10 +2,8 @@
 
 #include "File.hpp"
 #include "Tokenizer.hpp"
-#include "Expression.hpp"
+#include "AST.hpp"
 #include "Interpreter.hpp"
-
-#include "Lib/magic_enum.hpp"
 
 int main(int argc, char** argv) noexcept {
 	auto t1 = seconds();
@@ -28,10 +26,10 @@ int main(int argc, char** argv) noexcept {
 	printf("%s\n", file.c_str());
 
 	auto tokens = tokenize(file);
- 
+
 	size_t i = 0;
 	for (auto& x : tokens) {
-		printf("%zu, %s ", i++, magic_enum::enum_name(x.type).data());
+		printf("%zu, %s ", i++, token_type_to_string(x.type).c_str());
 		printf("[%zu; %zu] %.*s\n", x.line, x.col, (int)x.lexeme.size, &file[x.lexeme.i]);
 	}
 
@@ -41,12 +39,12 @@ int main(int argc, char** argv) noexcept {
 	for (auto& x : exprs.nodes) if (x.kind && x->depth == 0)
 		printf("%s;\n", x->string(file, exprs).c_str());
 
-	Interpreter interpreter;
-	interpreter.push_builtin();
-	interpreter.variables.reserve(100000);
+	AST_Interpreter ast_interpreter;
+	ast_interpreter.push_builtin();
+	ast_interpreter.variables.reserve(100000);
 
 	for (size_t i = 1; i < exprs.nodes.size(); ++i) if (exprs.nodes[i]->depth == 0)
-		interpreter.print_value(interpreter.interpret(exprs.nodes, i, file));
+		ast_interpreter.print_value(ast_interpreter.interpret(exprs.nodes, i, file));
 
 	return 0;
 }

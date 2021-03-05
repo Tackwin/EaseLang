@@ -1,5 +1,5 @@
 #include "Interpreter.hpp"
-#include "Expression.hpp"
+#include "AST.hpp"
 
 #include "xstd.hpp"
 
@@ -10,29 +10,29 @@
 template<typename T>
 T cast(const std::any& x) { return std::any_cast<T>(x); }
 
-std::any Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx];
 	switch (node.kind) {
-	case Expressions::AST_Node::Identifier_Kind:          return identifier   (nodes, idx, file);
-	case Expressions::AST_Node::Type_Identifier_Kind:     return type_ident   (nodes, idx, file);
-	case Expressions::AST_Node::Assignement_Kind:         return assignement  (nodes, idx, file);
-	case Expressions::AST_Node::Litteral_Kind:            return litteral     (nodes, idx, file);
-	case Expressions::AST_Node::Operation_List_Kind:      return list_op      (nodes, idx, file);
-	case Expressions::AST_Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, file);
-	case Expressions::AST_Node::Expression_Kind:          return expression   (nodes, idx, file);
-	case Expressions::AST_Node::Function_Definition_Kind: return function     (nodes, idx, file);
-	case Expressions::AST_Node::If_Kind:                  return if_call      (nodes, idx, file);
-	case Expressions::AST_Node::For_Kind:                 return for_loop     (nodes, idx, file);
-	case Expressions::AST_Node::While_Kind:               return while_loop   (nodes, idx, file);
-	case Expressions::AST_Node::Function_Call_Kind:       return function_call(nodes, idx, file);
-	case Expressions::AST_Node::Return_Call_Kind:         return return_call  (nodes, idx, file);
-	case Expressions::AST_Node::Struct_Definition_Kind:   return struct_def   (nodes, idx, file);
-	case Expressions::AST_Node::Initializer_List_Kind:    return init_list    (nodes, idx, file);
+	case AST::Node::Identifier_Kind:          return identifier   (nodes, idx, file);
+	case AST::Node::Type_Identifier_Kind:     return type_ident   (nodes, idx, file);
+	case AST::Node::Assignement_Kind:         return assignement  (nodes, idx, file);
+	case AST::Node::Litteral_Kind:            return litteral     (nodes, idx, file);
+	case AST::Node::Operation_List_Kind:      return list_op      (nodes, idx, file);
+	case AST::Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, file);
+	case AST::Node::Expression_Kind:          return expression   (nodes, idx, file);
+	case AST::Node::Function_Definition_Kind: return function     (nodes, idx, file);
+	case AST::Node::If_Kind:                  return if_call      (nodes, idx, file);
+	case AST::Node::For_Kind:                 return for_loop     (nodes, idx, file);
+	case AST::Node::While_Kind:               return while_loop   (nodes, idx, file);
+	case AST::Node::Function_Call_Kind:       return function_call(nodes, idx, file);
+	case AST::Node::Return_Call_Kind:         return return_call  (nodes, idx, file);
+	case AST::Node::Struct_Definition_Kind:   return struct_def   (nodes, idx, file);
+	case AST::Node::Initializer_List_Kind:    return init_list    (nodes, idx, file);
 	default:                        return nullptr;
 	}
 }
 
-std::any Interpreter::interpret(
+std::any AST_Interpreter::interpret(
 	AST_Nodes nodes, const Function_Definition& f, std::string_view file
 ) noexcept {
 	push_scope();
@@ -63,7 +63,7 @@ std::any Interpreter::interpret(
 	return r.values.empty() ? nullptr : at(r.values.front());
 }
 
-std::any Interpreter::init_list(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::init_list(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Initializer_List_;
 
 	if (node.type_identifier) {
@@ -91,11 +91,11 @@ std::any Interpreter::init_list(AST_Nodes nodes, size_t idx, std::string_view fi
 	return nullptr;
 }
 
-std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Unary_Operation_;
 
 	switch (node.op) {
-		case Expressions::Operator::Minus: {
+		case AST::Operator::Minus: {
 			auto x = interpret(nodes, node.right_idx, file);
 			if (typecheck<Identifier>(x)) x = at(cast<Identifier>(x));
 			if (typecheck<long double>(x)) {
@@ -104,7 +104,7 @@ std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fil
 			}
 			return -std::any_cast<long double>(x);
 		}
-		case Expressions::Operator::Plus: {
+		case AST::Operator::Plus: {
 			auto x = interpret(nodes, node.right_idx, file);
 			if (typecheck<Identifier>(x)) x = at(cast<Identifier>(x));
 			if (typecheck<long double>(x)) {
@@ -113,7 +113,7 @@ std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fil
 			}
 			return +std::any_cast<long double>(x);
 		}
-		case Expressions::Operator::Inc: {
+		case AST::Operator::Inc: {
 			auto x = interpret(nodes, node.right_idx, file);
 			if (!typecheck<Identifier>(x)) {
 				println("Type error, expected identifier got %s", x.type().name());
@@ -129,7 +129,7 @@ std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fil
 
 			return cast<long double>(at(cast<Identifier>(x))) + 1;
 		}
-		case Expressions::Operator::Amp: {
+		case AST::Operator::Amp: {
 			auto x = interpret(nodes, node.right_idx, file);
 			if (!typecheck<Identifier>(x)) {
 				println("Type error, expected Identifier got %s", x.type().name());
@@ -138,7 +138,7 @@ std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fil
 
 			return Pointer{ cast<Identifier>(x).memory_idx };
 		}
-		case Expressions::Operator::Star: {
+		case AST::Operator::Star: {
 			auto x = interpret(nodes, node.right_idx, file);
 			if (typecheck<Identifier>(x)) x = at(cast<Identifier>(x));
 			if (!typecheck<Pointer>(x)) {
@@ -148,15 +148,15 @@ std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fil
 
 			return at(cast<Pointer>(x));
 		}
-		case Expressions::Operator::Not:
+		case AST::Operator::Not:
 		default: return nullptr;
 	}
 }
 
-std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Operation_List_;
 	switch(node.op) {
-		case Expressions::Operator::Gt: {
+		case AST::Operator::Gt: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 			
@@ -174,7 +174,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) > std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Eq: {
+		case AST::Operator::Eq: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 			
@@ -192,7 +192,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) == std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Neq: {
+		case AST::Operator::Neq: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 			
@@ -210,7 +210,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) != std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Lt: {
+		case AST::Operator::Lt: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -228,7 +228,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) < std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Assign: {
+		case AST::Operator::Assign: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -247,7 +247,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return right;
 		}
-		case Expressions::Operator::Leq: {
+		case AST::Operator::Leq: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -265,7 +265,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) <= std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Plus: {
+		case AST::Operator::Plus: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -283,7 +283,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) + std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Star: {
+		case AST::Operator::Star: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -301,7 +301,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) * std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Div: {
+		case AST::Operator::Div: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -319,7 +319,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) / std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Mod: {
+		case AST::Operator::Mod: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -337,7 +337,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::fmodl(std::any_cast<long double>(left), std::any_cast<long double>(right));
 		}
-		case Expressions::Operator::Minus: {
+		case AST::Operator::Minus: {
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
@@ -355,7 +355,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) - std::any_cast<long double>(right);
 		}
-		case Expressions::Operator::Dot: {
+		case AST::Operator::Dot: {
 			auto root_struct = interpret(nodes, node.left_idx, file);
 			if (typecheck<Identifier>(root_struct)) root_struct = at(cast<Identifier>(root_struct));
 			if (typecheck<Pointer   >(root_struct)) root_struct = at(cast<Pointer   >(root_struct));
@@ -367,7 +367,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 			auto helper =
 			[&] (const User_Struct& user_struct, size_t next, auto& helper) -> std::any {
 				auto& next_node = nodes[next];
-				if (next_node.kind != Expressions::AST_Node::Identifier_Kind) {
+				if (next_node.kind != AST::Node::Identifier_Kind) {
 					printlns("Error non identifier in the chain.");
 					return nullptr;
 				}
@@ -398,15 +398,15 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 			return helper(std::any_cast<User_Struct>(root_struct), node.rest_idx, helper);
 		}
 		default:{
-			println("Unsupported operation %s", Expressions::op_to_string(node.op));
+			println("Unsupported operation %s", AST::op_to_string(node.op));
 			return nullptr;
 		}
 	}
 }
 
-std::any Interpreter::factor(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::factor(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx];
-	#define EA Expressions::AST_Node
+	#define EA AST::Node
 	switch (nodes[idx].kind) {
 		default:                       return litteral  (nodes, idx, file);
 		case EA::Unary_Operation_Kind: return unary_op  (nodes, idx, file);
@@ -418,7 +418,7 @@ std::any Interpreter::factor(AST_Nodes nodes, size_t idx, std::string_view file)
 	#undef EA
 }
 
-std::any Interpreter::if_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::if_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].If_;
 
 	auto cond = interpret(nodes, node.condition_idx, file);
@@ -445,7 +445,7 @@ std::any Interpreter::if_call(AST_Nodes nodes, size_t idx, std::string_view file
 	return nullptr;
 }
 
-std::any Interpreter::for_loop(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::for_loop(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].For_;
 
 	push_scope();
@@ -475,7 +475,7 @@ std::any Interpreter::for_loop(AST_Nodes nodes, size_t idx, std::string_view fil
 }
 
 
-std::any Interpreter::while_loop(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::while_loop(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].While_;
 
 	push_scope();
@@ -500,7 +500,7 @@ std::any Interpreter::while_loop(AST_Nodes nodes, size_t idx, std::string_view f
 	return nullptr;
 }
 
-std::any Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Struct_Definition_;
 
 	User_Struct x;
@@ -514,7 +514,7 @@ std::any Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view f
 	return x;
 }
 
-std::any Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Function_Definition_;
 
 	Function_Definition f;
@@ -546,7 +546,7 @@ std::any Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view fil
 	return f;
 }
 
-std::any Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Function_Call_;
 
 	auto id = interpret(nodes, node.identifier_idx, file);
@@ -578,7 +578,7 @@ std::any Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vie
 	return interpret(nodes, *f, file);
 }
 
-std::any Interpreter::return_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::return_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Return_Call_;
 
 	Return_Call r;
@@ -592,20 +592,20 @@ std::any Interpreter::return_call(AST_Nodes nodes, size_t idx, std::string_view 
 }
 
 
-std::any Interpreter::identifier(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::identifier(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Identifier_;
 
 	return Identifier{ lookup_addr(string_view_from_view(file, node.token.lexeme)) };
 }
 
-std::any Interpreter::type_ident(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::type_ident(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Type_Identifier_;
 
 	return lookup(string_view_from_view(file, node.identifier.lexeme));
 }
 
 
-std::any Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Assignement_;
 
 	// >TODO(Tackwin): handle type info.
@@ -624,7 +624,7 @@ std::any Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view 
 	return at(variables.back()[name]);
 }
 
-std::any Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Litteral_;
 	auto view = node.token.lexeme;
 
@@ -651,11 +651,11 @@ std::any Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view fil
 	return nullptr;
 }
 
-std::any Interpreter::expression(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+std::any AST_Interpreter::expression(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	return interpret(nodes, nodes[idx].Expression_.inner_idx, file);
 }
 
-void Interpreter::print_value(const std::any& value) noexcept {
+void AST_Interpreter::print_value(const std::any& value) noexcept {
 	if (typecheck<std::nullptr_t>(value)) {
 		printlns("RIP F in the chat for my boiii");
 		return;
@@ -686,23 +686,23 @@ void Interpreter::print_value(const std::any& value) noexcept {
 	}
 }
 
-std::any Interpreter::lookup(std::string_view id) noexcept {
+std::any AST_Interpreter::lookup(std::string_view id) noexcept {
 	for (size_t i = variables.size() - 1; i + 1 > limit_scope.top(); --i)
 		for (auto& [x, v] : variables[i]) if (x == id) return at(v);
 	println("Can not find variable named %.*s.", (int)id.size(), id.data());
 	return nullptr;
 }
-size_t Interpreter::lookup_addr(std::string_view id) noexcept {
+size_t AST_Interpreter::lookup_addr(std::string_view id) noexcept {
 	for (size_t i = variables.size() - 1; i + 1 > limit_scope.top(); --i)
 		for (auto& [x, v] : variables[i]) if (x == id) return v;
 	println("Can not find variable named %.*s.", (int)id.size(), id.data());
 	return 0;
 }
 
-void Interpreter::push_scope() noexcept { variables.emplace_back(); }
-void Interpreter::pop_scope()  noexcept { variables.pop_back(); }
+void AST_Interpreter::push_scope() noexcept { variables.emplace_back(); }
+void AST_Interpreter::pop_scope()  noexcept { variables.pop_back(); }
 
-void Interpreter::push_builtin() noexcept {
+void AST_Interpreter::push_builtin() noexcept {
 	Builtin print;
 	print.f = [&] (std::vector<size_t> values) -> size_t {
 		for (auto& x : values) {
@@ -742,12 +742,12 @@ void Interpreter::push_builtin() noexcept {
 }
 
 
-size_t Interpreter::alloc(std::any x) noexcept {
+size_t AST_Interpreter::alloc(std::any x) noexcept {
 	memory.push_back(std::move(x));
 	return memory.size() - 1;
 }
 
-std::any Interpreter::at(size_t idx) noexcept {
+std::any AST_Interpreter::at(size_t idx) noexcept {
 	if (memory.size() <= idx) {
 		println(
 			"Tried to access memory %zu. Is out of bounds, memory have size %zu.",

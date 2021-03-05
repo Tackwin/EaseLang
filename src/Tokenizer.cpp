@@ -151,3 +151,50 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 
 	return tokens;
 }
+
+std::string token_type_to_string(Token::Type type) noexcept {
+	switch (type) {
+		case Token::Type::Open_Paran: return "Open_Paran";
+		case Token::Type::Close_Paran: return "Close_Paran";
+		case Token::Type::Open_Brace: return "Open_Brace";
+		case Token::Type::Close_Brace: return "Close_Brace";
+		case Token::Type::Open_Brack: return "Open_Brack";
+		case Token::Type::Close_Brack: return "Close_Brack";
+		case Token::Type::Identifier: return "Identifier";
+		case Token::Type::Comma: return "Comma";
+		case Token::Type::Colon: return "Colon";
+		case Token::Type::Dot: return "Dot";
+		case Token::Type::Minus: return "Minus";
+		case Token::Type::Not: return "Not";
+		case Token::Type::Geq: return "Geq";
+		case Token::Type::Gt: return "Gt";
+		case Token::Type::Leq: return "Leq";
+		case Token::Type::Lt: return "Lt";
+		case Token::Type::Eq: return "Eq";
+		case Token::Type::Neq: return "Neq";
+		case Token::Type::And: return "And";
+		case Token::Type::Or: return "Or";
+		case Token::Type::Amp: return "Amp";
+		case Token::Type::Plus: return "Plus";
+		case Token::Type::Mod: return "Mod";
+		case Token::Type::Inc: return "Inc";
+		case Token::Type::Div: return "Div";
+		case Token::Type::Semicolon: return "Semicolon";
+		case Token::Type::Arrow: return "Arrow";
+		case Token::Type::Star: return "Star";
+		case Token::Type::Return: return "Return";
+		case Token::Type::Proc: return "Proc";
+		case Token::Type::For: return "For";
+		case Token::Type::While: return "While";
+		case Token::Type::Const: return "Const";
+		case Token::Type::Struct: return "Struct";
+		case Token::Type::If: return "If";
+		case Token::Type::Else: return "Else";
+		case Token::Type::Equal: return "Equal";
+		case Token::Type::Number: return "Number";
+		case Token::Type::String: return "String";
+		case Token::Type::Count: return "Count";
+		default:
+		case Token::Type::Unknown: return "Unknown";
+	}
+}

@@ -10,9 +10,9 @@
 #include "xstd.hpp"
 #include "Tokenizer.hpp"
 
-struct Expressions {
+struct AST {
 	struct Statement {
-		virtual std::string string(std::string_view, const Expressions& expressions) const noexcept
+		virtual std::string string(std::string_view, const AST& expressions) const noexcept
 		{
 			return "statement;\n";
 		}
@@ -25,7 +25,7 @@ struct Expressions {
 	struct Expression : Statement {
 		size_t inner_idx = 0;
 
-		virtual std::string string(std::string_view str, const Expressions& expr) const noexcept {
+		virtual std::string string(std::string_view str, const AST& expr) const noexcept {
 			return expr.nodes[inner_idx]->string(str, expr);
 		}
 	};
@@ -37,7 +37,7 @@ struct Expressions {
 
 		// Gather all the keyword lol
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res;
 			res += string_from_view(file, identifier.lexeme) + " :";
@@ -98,7 +98,7 @@ struct Expressions {
 		size_t right_idx = 0;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res;
 			res += op_to_string(op);
@@ -113,7 +113,7 @@ struct Expressions {
 		Operator op = Operator::Null;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res;
 
@@ -134,7 +134,7 @@ struct Expressions {
 		Token token;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			return string_from_view(file, token.lexeme);
 		}
@@ -147,7 +147,7 @@ struct Expressions {
 		std::optional<size_t> pointer_to = std::nullopt;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "";
 			
@@ -167,7 +167,7 @@ struct Expressions {
 		Token token;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override { return string_from_view(file, token.lexeme); }
 	};
 
@@ -177,7 +177,7 @@ struct Expressions {
 
 		// Gather all the keyword lol
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res;
 			res += expressions.nodes[identifier_idx]->string(file, expressions);
@@ -200,7 +200,7 @@ struct Expressions {
 
 		// Gather all the keyword lol
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "return ";
 			res += expressions.nodes[return_value_idx]->string(file, expressions);
@@ -212,7 +212,7 @@ struct Expressions {
 		size_t struct_line_idx = 0;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res;
 			for (size_t idx = struct_line_idx; idx; idx = expressions.nodes[idx]->next_statement)
@@ -228,7 +228,7 @@ struct Expressions {
 		size_t expression_list_idx = 0;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res;
 			if (type_identifier)
@@ -254,7 +254,7 @@ struct Expressions {
 
 		// Gather all the keyword lol
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "proc";
 
@@ -305,7 +305,7 @@ struct Expressions {
 
 		// Gather all the keyword lol
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			return expressions.nodes[value_idx]->string(file, expressions);
 		}
@@ -317,7 +317,7 @@ struct Expressions {
 
 		// Gather all the keyword lol
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			return 
 				expressions.nodes[type_identifier]->string(file, expressions) + " " +
@@ -331,7 +331,7 @@ struct Expressions {
 
 		// Gather all the keyword lol
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			return expressions.nodes[type_identifier]->string(file, expressions);
 		}
@@ -343,7 +343,7 @@ struct Expressions {
 		size_t condition_idx = 0;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "if ";
 			res += expressions.nodes[condition_idx]->string(file, expressions) + " {\n";
@@ -383,7 +383,7 @@ struct Expressions {
 		size_t loop_statement_idx = 0;
 
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "for (";
 
@@ -412,7 +412,7 @@ struct Expressions {
 		size_t loop_statement_idx = 0;
 		
 		virtual std::string string(
-			std::string_view file, const Expressions& expressions
+			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "while ";
 
@@ -452,7 +452,7 @@ struct Expressions {
 		X(Initializer_List   )\
 		X(Function_Definition)
 
-	struct AST_Node {
+	struct Node {
 		enum Kind {
 			None_Kind = 0
 			#define X(x) , x##_Kind
@@ -465,13 +465,13 @@ struct Expressions {
 			#undef X
 		};
 
-		#define X(x) AST_Node(x y) noexcept { kind = x##_Kind; new (&x##_) x; x##_ = (y); }
+		#define X(x) Node(x y) noexcept { kind = x##_Kind; new (&x##_) x; x##_ = (y); }
 		LIST_AST_TYPE
 		#undef X
 
-		AST_Node(std::nullptr_t) noexcept { kind = None_Kind; }
+		Node(std::nullptr_t) noexcept { kind = None_Kind; }
 
-		AST_Node(AST_Node&& that) noexcept {
+		Node(Node&& that) noexcept {
 			kind = that.kind;
 			switch (kind) {
 				#define X(x) case x##_Kind: new(&x##_) x; x##_ = that.x##_; break;
@@ -499,10 +499,10 @@ struct Expressions {
 		}
 	};
 
-	std::vector<AST_Node> nodes;
+	std::vector<Node> nodes;
 };
 
 
-extern Expressions parse(
+extern AST parse(
 	const std::vector<Token>& tokens, std::string_view file
 ) noexcept;

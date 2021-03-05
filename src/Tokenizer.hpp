@@ -63,3 +63,4 @@ struct Token {
 };
 
 extern std::vector<Token> tokenize(std::string_view str) noexcept;
+extern std::string token_type_to_string(Token::Type type) noexcept;

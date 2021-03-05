@@ -7,11 +7,11 @@
 #include <functional>
 #include <string_view>
 #include <unordered_map>
-#include "Expression.hpp"
+#include "AST.hpp"
 
 // I guess you can't forward decl nested struct in c++ :)))))
-// struct Expressions { struct AST_Node; };
-struct Interpreter {
+// struct AST { struct Node; };
+struct AST_Interpreter {
 
 	std::vector<std::any> memory;
 
@@ -51,7 +51,7 @@ struct Interpreter {
 		std::vector<size_t>      member_values;
 	};
 
-	using AST_Nodes = const std::vector<Expressions::AST_Node>&;
+	using AST_Nodes = const std::vector<AST::Node>&;
 
 	std::any litteral     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any unary_op     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
@@ -95,5 +95,5 @@ struct Interpreter {
 
 	void push_builtin() noexcept;
 
-	Interpreter() noexcept { memory.push_back(nullptr); push_scope(); limit_scope.push(0); }
+	AST_Interpreter() noexcept { memory.push_back(nullptr); push_scope(); limit_scope.push(0); }
 };
