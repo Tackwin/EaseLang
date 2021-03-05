@@ -62,11 +62,14 @@ struct Interpreter {
 	std::any type_ident   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any assignement  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any if_call      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	std::any for_loop     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	std::any while_loop   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any function     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any return_call  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any struct_def   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any init_list    (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+
 
 	std::any interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any interpret(

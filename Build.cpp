@@ -21,10 +21,11 @@ Build build(Flags flags) noexcept {
 	b.no_warnings_win32();
 	if (Env::Win32 && flags.generate_debug) {
 		b.add_debug_defines();
-		b.add_library("msvcrtd");
-		b.add_library("ucrtd");
-		b.add_library("vcruntimed");
+		b.add_library("libucrtd");
+		b.add_library("libvcruntimed");
+		b.add_library("libcmtd");
 		b.add_library("libcpmtd");
+		b.add_library("libconcrtd");
 		b.add_library("Kernel32");
 	}
 

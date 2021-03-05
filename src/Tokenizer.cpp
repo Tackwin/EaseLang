@@ -47,9 +47,15 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 		case ']': new_token.type = Token::Type::Close_Brack;  i++; break;
 		case ',': new_token.type = Token::Type::Comma;        i++; break;
 		case '.': new_token.type = Token::Type::Dot;          i++; break;
+		case '%': new_token.type = Token::Type::Mod;          i++; break;
 		case ';': new_token.type = Token::Type::Semicolon;    i++; break;
-		case '+': new_token.type = Token::Type::Plus;         i++; break;
+		case '+': {
+			if (peek_is('+')) { new_token.type = Token::Type::Inc;  i += 2; }
+			else              { new_token.type = Token::Type::Plus; i ++  ; }
+			break;
+		}
 		case '*': new_token.type = Token::Type::Star;         i++; break;
+		case '/': new_token.type = Token::Type::Div;         i++; break;
 		case ':': new_token.type = Token::Type::Colon;        i++; break;
 		case '<': {
 			if (peek_is('=')) { new_token.type = Token::Type::Leq; i += 2; }
@@ -110,6 +116,14 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 		else if (string_comp(i, "else", str)) {
 			new_token.type = Token::Type::Else;
 			i += 4;
+		}
+		else if (string_comp(i, "for", str)) {
+			new_token.type = Token::Type::For;
+			i += 3;
+		}
+		else if (string_comp(i, "while", str)) {
+			new_token.type = Token::Type::While;
+			i += 5;
 		}
 		else if (string_comp(i, "proc", str)) {
 			new_token.type = Token::Type::Proc;

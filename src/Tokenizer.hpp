@@ -30,6 +30,9 @@ struct Token {
 		Or,
 		Amp,
 		Plus,
+		Mod,
+		Inc,
+		Div,
 
 		Semicolon,
 		Arrow,
@@ -38,6 +41,8 @@ struct Token {
 //		KEYWORD
 		Return,
 		Proc,
+		For,
+		While,
 		Const,
 		Struct,
 		If,

@@ -4,6 +4,7 @@
 #include "xstd.hpp"
 
 #include <charconv>
+#include <thread>
 
 
 template<typename T>
@@ -21,6 +22,8 @@ std::any Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view fi
 	case Expressions::AST_Node::Expression_Kind:          return expression   (nodes, idx, file);
 	case Expressions::AST_Node::Function_Definition_Kind: return function     (nodes, idx, file);
 	case Expressions::AST_Node::If_Kind:                  return if_call      (nodes, idx, file);
+	case Expressions::AST_Node::For_Kind:                 return for_loop     (nodes, idx, file);
+	case Expressions::AST_Node::While_Kind:               return while_loop   (nodes, idx, file);
 	case Expressions::AST_Node::Function_Call_Kind:       return function_call(nodes, idx, file);
 	case Expressions::AST_Node::Return_Call_Kind:         return return_call  (nodes, idx, file);
 	case Expressions::AST_Node::Struct_Definition_Kind:   return struct_def   (nodes, idx, file);
@@ -110,6 +113,22 @@ std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fil
 			}
 			return +std::any_cast<long double>(x);
 		}
+		case Expressions::Operator::Inc: {
+			auto x = interpret(nodes, node.right_idx, file);
+			if (!typecheck<Identifier>(x)) {
+				println("Type error, expected identifier got %s", x.type().name());
+				return nullptr;
+			}
+
+			if (!typecheck<long double>(at(cast<Identifier>(x))))  {
+				println("Type error, expected long double got %s", x.type().name());
+				return nullptr;
+			}
+
+			memory[cast<Identifier>(x).memory_idx] = 1 + cast<long double>(at(cast<Identifier>(x)));
+
+			return cast<long double>(at(cast<Identifier>(x))) + 1;
+		}
 		case Expressions::Operator::Amp: {
 			auto x = interpret(nodes, node.right_idx, file);
 			if (!typecheck<Identifier>(x)) {
@@ -119,7 +138,7 @@ std::any Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fil
 
 			return Pointer{ cast<Identifier>(x).memory_idx };
 		}
-		case Expressions::Operator::Deref: {
+		case Expressions::Operator::Star: {
 			auto x = interpret(nodes, node.right_idx, file);
 			if (typecheck<Identifier>(x)) x = at(cast<Identifier>(x));
 			if (!typecheck<Pointer>(x)) {
@@ -138,8 +157,8 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 	auto& node = nodes[idx].Operation_List_;
 	switch(node.op) {
 		case Expressions::Operator::Gt: {
-			auto left = interpret(nodes, node.operand_idx, file);
-			auto right = interpret(nodes, node.next_statement, file);
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
 			
 			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
 			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
@@ -155,9 +174,45 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) > std::any_cast<long double>(right);
 		}
+		case Expressions::Operator::Eq: {
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
+			
+			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
+			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
+
+			if (!typecheck<long double>(left)) {
+				println("Error expected long double for the lhs, got %s", left.type().name());
+				return nullptr;
+			}
+			if (!typecheck<long double>(right)) {
+				println("Error expected long double for the rhs, got %s", right.type().name());
+				return nullptr;
+			}
+
+			return std::any_cast<long double>(left) == std::any_cast<long double>(right);
+		}
+		case Expressions::Operator::Neq: {
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
+			
+			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
+			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
+
+			if (!typecheck<long double>(left)) {
+				println("Error expected long double for the lhs, got %s", left.type().name());
+				return nullptr;
+			}
+			if (!typecheck<long double>(right)) {
+				println("Error expected long double for the rhs, got %s", right.type().name());
+				return nullptr;
+			}
+
+			return std::any_cast<long double>(left) != std::any_cast<long double>(right);
+		}
 		case Expressions::Operator::Lt: {
-			auto left = interpret(nodes, node.operand_idx, file);
-			auto right = interpret(nodes, node.next_statement, file);
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
 
 			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
 			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
@@ -173,9 +228,28 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) < std::any_cast<long double>(right);
 		}
+		case Expressions::Operator::Assign: {
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
+
+			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
+			
+			if (!typecheck<Identifier>(left)) {
+				println("Error expected Identifier for the lhs, got %s", left.type().name());
+				return nullptr;
+			}
+			if (!typecheck<long double>(right)) {
+				println("Error expected long double for the rhs, got %s", right.type().name());
+				return nullptr;
+			}
+
+			memory[cast<Identifier>(left).memory_idx] = right;
+
+			return right;
+		}
 		case Expressions::Operator::Leq: {
-			auto left = interpret(nodes, node.operand_idx, file);
-			auto right = interpret(nodes, node.next_statement, file);
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
 
 			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
 			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
@@ -192,8 +266,8 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 			return std::any_cast<long double>(left) <= std::any_cast<long double>(right);
 		}
 		case Expressions::Operator::Plus: {
-			auto left = interpret(nodes, node.operand_idx, file);
-			auto right = interpret(nodes, node.next_statement, file);
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
 
 			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
 			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
@@ -209,9 +283,63 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 
 			return std::any_cast<long double>(left) + std::any_cast<long double>(right);
 		}
+		case Expressions::Operator::Star: {
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
+
+			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
+			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
+			
+			if (!typecheck<long double>(left)) {
+				println("Error expected long double for the lhs, got %s", left.type().name());
+				return nullptr;
+			}
+			if (!typecheck<long double>(right)) {
+				println("Error expected long double for the rhs, got %s", right.type().name());
+				return nullptr;
+			}
+
+			return std::any_cast<long double>(left) * std::any_cast<long double>(right);
+		}
+		case Expressions::Operator::Div: {
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
+
+			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
+			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
+			
+			if (!typecheck<long double>(left)) {
+				println("Error expected long double for the lhs, got %s", left.type().name());
+				return nullptr;
+			}
+			if (!typecheck<long double>(right)) {
+				println("Error expected long double for the rhs, got %s", right.type().name());
+				return nullptr;
+			}
+
+			return std::any_cast<long double>(left) / std::any_cast<long double>(right);
+		}
+		case Expressions::Operator::Mod: {
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
+
+			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
+			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
+			
+			if (!typecheck<long double>(left)) {
+				println("Error expected long double for the lhs, got %s", left.type().name());
+				return nullptr;
+			}
+			if (!typecheck<long double>(right)) {
+				println("Error expected long double for the rhs, got %s", right.type().name());
+				return nullptr;
+			}
+
+			return std::fmodl(std::any_cast<long double>(left), std::any_cast<long double>(right));
+		}
 		case Expressions::Operator::Minus: {
-			auto left = interpret(nodes, node.operand_idx, file);
-			auto right = interpret(nodes, node.next_statement, file);
+			auto left = interpret(nodes, node.left_idx, file);
+			auto right = interpret(nodes, node.rest_idx, file);
 
 			if (typecheck<Identifier>(left )) left  = at(cast<Identifier>(left ));
 			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
@@ -228,7 +356,7 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 			return std::any_cast<long double>(left) - std::any_cast<long double>(right);
 		}
 		case Expressions::Operator::Dot: {
-			auto root_struct = interpret(nodes, node.operand_idx, file);
+			auto root_struct = interpret(nodes, node.left_idx, file);
 			if (typecheck<Identifier>(root_struct)) root_struct = at(cast<Identifier>(root_struct));
 			if (typecheck<Pointer   >(root_struct)) root_struct = at(cast<Pointer   >(root_struct));
 			if (!typecheck<User_Struct>(root_struct)) {
@@ -264,9 +392,10 @@ std::any Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view file
 				}
 
 				return x;
+
 			};
 
-			return helper(std::any_cast<User_Struct>(root_struct), node.next_statement, helper);
+			return helper(std::any_cast<User_Struct>(root_struct), node.rest_idx, helper);
 		}
 		default:{
 			println("Unsupported operation %s", Expressions::op_to_string(node.op));
@@ -308,6 +437,61 @@ std::any Interpreter::if_call(AST_Nodes nodes, size_t idx, std::string_view file
 		}
 	} else {
 		for (size_t idx = node.else_statement_idx; idx; idx = nodes[idx]->next_statement) {
+			auto v = interpret(nodes, idx, file);
+			if (typecheck<Return_Call>(v)) return v;
+		}
+	}
+
+	return nullptr;
+}
+
+std::any Interpreter::for_loop(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+	auto& node = nodes[idx].For_;
+
+	push_scope();
+	defer { pop_scope(); };
+
+	interpret(nodes, node.init_statement_idx, file);
+
+	while (true) {
+		auto cond = interpret(nodes, node.cond_statement_idx, file);
+		if (typecheck<Identifier>(cond)) cond = at(cast<Identifier>(cond));
+		if (!typecheck<bool>(cond)) {
+			println("Expected bool on the for-condition got %s.", cond.type().name());
+			return nullptr;
+		}
+
+		if (!cast<bool>(cond)) break;
+
+		for (size_t idx = node.loop_statement_idx; idx; idx = nodes[idx]->next_statement) {
+			auto v = interpret(nodes, idx, file);
+			if (typecheck<Return_Call>(v)) return v;
+		}
+
+		interpret(nodes, node.next_statement_idx, file);
+	}
+
+	return nullptr;
+}
+
+
+std::any Interpreter::while_loop(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+	auto& node = nodes[idx].While_;
+
+	push_scope();
+	defer { pop_scope(); };
+
+	while (true) {
+		auto cond = interpret(nodes, node.cond_statement_idx, file);
+		if (typecheck<Identifier>(cond)) cond = at(cast<Identifier>(cond));
+		if (!typecheck<bool>(cond)) {
+			println("Expected bool on the while-condition got %s.", cond.type().name());
+			return nullptr;
+		}
+
+		if (!cast<bool>(cond)) break;
+
+		for (size_t idx = node.loop_statement_idx; idx; idx = nodes[idx]->next_statement) {
 			auto v = interpret(nodes, idx, file);
 			if (typecheck<Return_Call>(v)) return v;
 		}
@@ -365,7 +549,9 @@ std::any Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view fil
 std::any Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Function_Call_;
 
-	auto id = lookup(string_view_from_view(file, node.identifier.lexeme));
+	auto id = interpret(nodes, node.identifier_idx, file);
+	if (typecheck<Identifier>(id)) id = at(cast<Identifier>(id));
+
 	if (typecheck<Builtin>(id)) {
 		std::vector<size_t> args;
 		for (size_t idx = node.argument_list_idx, i = 0; idx; idx = nodes[idx]->next_statement, i++)
@@ -534,6 +720,25 @@ void Interpreter::push_builtin() noexcept {
 		return 0;
 	};
 	variables.back()["print"] = alloc(print);
+
+	Builtin sleep;
+	sleep.f = [&] (std::vector<size_t> values) -> size_t {
+		if (values.size() != 1) {
+			println("Sleep expect 1 long double argument got %zu arguments.", values.size());
+			return 0;
+		}
+		auto x = at(values.front());
+		if (!typecheck<long double>(x)) {
+			println("Sleep expect 1 long double argument got %s.", x.type().name());
+			return 0;
+		}
+
+		std::this_thread::sleep_for(
+			std::chrono::nanoseconds((size_t)(1'000'000'000 * cast<long double>(x)))
+		);
+		return 0;
+	};
+	variables.back()["sleep"] = alloc(sleep);
 }
 
 

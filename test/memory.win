@@ -3,7 +3,7 @@ vec2 := struct {
 	y := 0;
 };
 
-main := proc () {
+main := proc {
 	v := vec2{5, 6};
 	v_ptr : vec2* = &v;
 

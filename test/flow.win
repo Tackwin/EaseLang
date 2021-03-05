@@ -1,0 +1,21 @@
+main := proc {
+	x := 5;
+	if x > 1 {
+		print("x > 1");
+	} else {
+		print("x <= 1");
+	}
+
+	for (i := 0; i < x; i++;) {
+		print("i", i);
+	}
+
+	while x > 1 {
+		x = x / 2;
+
+		print(x);
+		sleep(1);
+	}
+};
+
+main();

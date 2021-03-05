@@ -34,6 +34,11 @@ struct Parser_State {
 	exprs.nodes.emplace_back(x);\
 	return x_idx;\
 	}
+	#define ast_return_(x) {\
+	auto x##_idx = exprs.nodes.size();\
+	exprs.nodes.emplace_back(x);\
+	return x##_idx;\
+	}
 
 	size_t return_call() noexcept {
 		Expressions::Return_Call x;
@@ -62,41 +67,42 @@ struct Parser_State {
 		ast_return;
 	};
 
-	auto cast_to_unary_op(Token::Type x) noexcept {
+	auto cast_to_op(Token::Type x) noexcept {
 		switch(x) {
 			case Token::Type::Minus: return Expressions::Operator::Minus;
 			case Token::Type::Plus:  return Expressions::Operator::Plus;
 			case Token::Type::Not:   return Expressions::Operator::Not;
 			case Token::Type::Amp:   return Expressions::Operator::Amp;
-			case Token::Type::Star:  return Expressions::Operator::Deref;
-			default: return Expressions::Operator::Minus;
-		}
-	}
-	auto is_unary_op(Token::Type x) noexcept {
-		switch(x) {
-			case Token::Type::Minus: return true;
-			case Token::Type::Plus:  return true;
-			case Token::Type::Not:   return true;
-			case Token::Type::Amp:   return true;
-			case Token::Type::Star:  return true;
-			default: return false;
-		}
-	}
-
-	auto cast_to_binary_op(Token::Type x) noexcept {
-		switch (x) {
-			case Token::Type::Minus: return Expressions::Operator::Minus;
-			case Token::Type::Plus:  return Expressions::Operator::Plus;
+			case Token::Type::Star:  return Expressions::Operator::Star;
+			case Token::Type::Div:   return Expressions::Operator::Div;
+			case Token::Type::Inc:   return Expressions::Operator::Inc;
 			case Token::Type::Geq:   return Expressions::Operator::Geq;
 			case Token::Type::Gt:    return Expressions::Operator::Gt;
 			case Token::Type::Leq:   return Expressions::Operator::Leq;
 			case Token::Type::Lt:    return Expressions::Operator::Lt;
 			case Token::Type::Eq:    return Expressions::Operator::Eq;
 			case Token::Type::Neq:   return Expressions::Operator::Neq;
+			case Token::Type::Mod:   return Expressions::Operator::Mod;
+			case Token::Type::Equal: return Expressions::Operator::Assign;
 			case Token::Type::And:   return Expressions::Operator::And;
 			case Token::Type::Or:    return Expressions::Operator::Or;
 			case Token::Type::Dot:   return Expressions::Operator::Dot;
-			default: return Expressions::Operator::And;
+			default: return Expressions::Operator::Minus;
+		}
+	}
+	auto is_prefix_unary_op(Token::Type x) noexcept {
+		switch(x) {
+			case Token::Type::Minus: return true;
+			case Token::Type::Plus:  return true;
+			case Token::Type::Not:   return true;
+			case Token::Type::Amp:   return true;
+			default: return false;
+		}
+	}
+	auto is_postfix_unary_op(Token::Type x) noexcept {
+		switch(x) {
+			case Token::Type::Inc:   return true;
+			default: return false;
 		}
 	}
 
@@ -105,40 +111,37 @@ struct Parser_State {
 			case Token::Type::Minus: return true;
 			case Token::Type::Plus:  return true;
 			case Token::Type::Geq:   return true;
+			case Token::Type::Div:   return true;
 			case Token::Type::Gt:    return true;
+			case Token::Type::Mod:   return true;
 			case Token::Type::Leq:   return true;
 			case Token::Type::Lt:    return true;
 			case Token::Type::Eq:    return true;
 			case Token::Type::Neq:   return true;
 			case Token::Type::And:   return true;
+			case Token::Type::Equal: return true;
 			case Token::Type::Or:    return true;
 			case Token::Type::Dot:   return true;
 			default: return false;
 		}
 	}
 
-	size_t function_call() noexcept {
-		Expressions::Function_Call x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
-
-		if (!type_is(Token::Type::Identifier)) return 0;
-		x.identifier = tokens[i++];
-
+	size_t argument_lists() noexcept {
 		if (!type_is(Token::Type::Open_Paran)) return 0;
 		i++;
-
+		size_t start_idx = 0;
 		size_t idx = 0;
-		if (!type_is(Token::Type::Close_Paran))
-			x.argument_list_idx = idx = argument_list();
-		while (type_is(Token::Type::Comma) && i++)
+		if (!type_is(Token::Type::Close_Paran)) {
+			start_idx = idx = argument_list();
+			if (!idx) return 0;
+		}
+		while (type_is(Token::Type::Comma) && i++){
 			idx = exprs.nodes[idx]->next_statement = argument_list();
-
+			if (!idx) return 0;
+		}
 		if (!type_is(Token::Type::Close_Paran)) return 0;
 		i++;
-
-		ast_return;
+		return start_idx;
 	};
 
 	size_t return_list() noexcept {
@@ -242,10 +245,14 @@ struct Parser_State {
 		auto my_scope = ++current_scope;
 		size_t idx = 0;
 
-		if (!type_is(Token::Type::Close_Brace))
+		if (!type_is(Token::Type::Close_Brace)) {
 			x.if_statement_idx = idx = statement();
-		while (!type_is(Token::Type::Close_Brace) && current_scope == my_scope)
+			if (!idx) return 0;
+		}
+		while (!type_is(Token::Type::Close_Brace) && current_scope == my_scope) {
 			idx = exprs.nodes[idx]->next_statement = statement();
+			if (!idx) return 0;
+		}
 		i++;
 		
 		--current_scope;
@@ -258,14 +265,101 @@ struct Parser_State {
 
 			my_scope = ++current_scope;
 
-			if (!type_is(Token::Type::Close_Brace))
+			if (!type_is(Token::Type::Close_Brace)) {
 				x.else_statement_idx = idx = statement();
-			while (!type_is(Token::Type::Close_Brace) && current_scope == my_scope)
+				if (!idx) return 0;
+			}
+			while (!type_is(Token::Type::Close_Brace) && current_scope == my_scope) {
 				idx = exprs.nodes[idx]->next_statement = statement();
+				if (!idx) return 0;
+			}
 			i++;
 
 			--current_scope;
 		}
+
+		ast_return;
+	}
+
+	size_t for_loop() noexcept {
+
+		Expressions::For x;
+		x.scope = current_scope++;
+		x.depth = current_depth++;
+		defer {
+			current_scope--;
+			current_depth--;
+		};
+
+		if (!type_is(Token::Type::For)) return 0;
+		i++;
+
+		if (type_is(Token::Type::Open_Paran)) i++;
+
+		x.init_statement_idx = statement();
+		if (!x.init_statement_idx) return 0;
+
+
+		// >SEE(Tackwin): I need to sit down and write what i want to do with the ;s
+		// if (!type_is(Token::Type::Semicolon)) return 0;
+		// i++;
+
+		x.cond_statement_idx = statement();
+		if (!x.cond_statement_idx) return 0;
+
+		// if (!type_is(Token::Type::Semicolon)) return 0;
+		// i++;
+
+		x.next_statement_idx = statement();
+		if (!x.next_statement_idx) return 0;
+
+		if (type_is(Token::Type::Close_Paran)) i++;
+		if (!type_is(Token::Type::Open_Brace)) return 0;
+		i++;
+
+		size_t idx = 0;
+		if (!type_is(Token::Type::Close_Brace)) {
+			x.loop_statement_idx = idx = statement();
+			if (!idx) return 0;
+		}
+		while (!type_is(Token::Type::Close_Brace) && current_scope == x.scope + 1){
+			idx = exprs.nodes[idx]->next_statement = statement();
+			if (!idx) return 0;
+		}
+		i++;
+
+		ast_return;
+	}
+
+	size_t while_loop() noexcept {
+		Expressions::While x;
+		x.scope = current_scope++;
+		x.depth = current_depth++;
+		defer {
+			current_scope--;
+			current_depth--;
+		};
+
+		if (!type_is(Token::Type::While)) return 0;
+		i++;
+
+		x.cond_statement_idx = expression();
+		if (!x.cond_statement_idx) return 0;
+
+		if (!type_is(Token::Type::Open_Brace)) return 0;
+		i++;
+
+		size_t idx = 0;
+		if (!type_is(Token::Type::Close_Brace)) {
+			x.loop_statement_idx = idx = statement();
+			if (!idx) return 0;
+
+		}
+		while (!type_is(Token::Type::Close_Brace) && current_scope == x.scope + 1) {
+			idx = exprs.nodes[idx]->next_statement = statement();
+			if (!idx) return 0;
+		}
+		i++;
 
 		ast_return;
 	}
@@ -356,27 +450,27 @@ struct Parser_State {
 	#define TT Token::Type
 
 	size_t expression_helper(
-		const std::vector<std::initializer_list<TT>>& ops,
+		const std::vector<TT>& ops,
 		size_t it
 	) noexcept {
 		Expressions::Operation_List x;
 		x.scope = current_scope;
 		x.depth = current_depth;
 
-		if (it + 1 == ops.size()) x.operand_idx = factor();
-		else                      x.operand_idx = expression_helper(ops, it + 1);
+		if (it + 1 == ops.size()) x.left_idx = factor();
+		else                      x.left_idx = expression_helper(ops, it + 1);
 
 
-		if (!type_is_any(ops[it])) return x.operand_idx;
-		else                       x.op = cast_to_binary_op(tokens[i].type);
+		if (!type_is(ops[it])) return x.left_idx;
+		else                       x.op = cast_to_op(tokens[i].type);
 		
 		size_t idx = 0;
-		while ( type_is_any(ops[it]) && i++) {
+		while ( type_is(ops[it]) && i++) {
 			size_t t;
 			if (it + 1 == ops.size())  t = factor();
 			else                       t = expression_helper(ops, it + 1);
 
-			if (!idx) idx = x.next_statement = t;
+			if (!idx) idx = x.rest_idx = t;
 			else      idx = exprs.nodes[idx]->next_statement = t;
 			if (!idx) return 0;
 		}
@@ -385,12 +479,12 @@ struct Parser_State {
 	}
 
 	size_t expression() noexcept {
-		std::vector<std::initializer_list<TT>> least_to_most_precedent = {
-			{ TT::Or, TT::And },
-			{ TT::Eq, TT::Neq },
-			{ TT::Gt, TT::Geq, TT::Lt, TT::Leq },
-			{ TT::Plus, TT::Minus },
-			{ TT::Dot }
+		std::vector<TT> least_to_most_precedent = {
+			TT::Or, TT::And,
+			TT::Eq, TT::Neq,
+			TT::Gt, TT::Geq, TT::Lt, TT::Leq,
+			TT::Mod, TT::Plus, TT::Minus, TT::Star, TT::Div,
+			TT::Equal, TT::Dot
 		};
 
 		return expression_helper(least_to_most_precedent, 0);
@@ -402,8 +496,8 @@ struct Parser_State {
 		x.depth = current_depth++;
 		defer { current_depth--; };
 
-		if (!is_unary_op(tokens[i].type)) return 0;
-		x.op = cast_to_unary_op(tokens[i++].type);
+		if (!is_prefix_unary_op(tokens[i].type)) return 0;
+		x.op = cast_to_op(tokens[i++].type);
 
 		x.right_idx = factor();
 		if (!x.right_idx) return 0;
@@ -442,13 +536,37 @@ struct Parser_State {
 		ast_return;
 	}
 
-	size_t factor() noexcept {
-		if (type_is(Token::Type::Identifier) && next_type_is(Token::Type::Open_Paran))
-			return function_call();
+	size_t prefix_operator() noexcept {
+		if (is_prefix_unary_op(tokens[i].type)) return unary_operation();
+		return atom();
+	}
 
-		if (type_is(Token::Type::Identifier) && next_type_is(Token::Type::Open_Brace))
-			return initializer_list();
+	size_t postfix_operator() noexcept {
+		Expressions::Unary_Operation x;
+		x.scope = current_scope;
+		x.depth = current_depth++;
+		defer { current_depth--; };
 
+		x.right_idx = prefix_operator();
+		if (!is_postfix_unary_op(tokens[i].type)) {
+			if (type_is(Token::Type::Open_Paran)) {
+				Expressions::Function_Call y;
+				y.scope = x.scope;
+				y.depth = x.depth;
+				y.identifier_idx = x.right_idx;
+				y.argument_list_idx = argument_lists();
+				
+				ast_return_(y);
+			}
+			return x.right_idx;
+		}
+
+		x.op = cast_to_op(tokens[i++].type);
+
+		ast_return;
+	}
+
+	size_t atom() noexcept {
 		if (type_is(Token::Type::Open_Paran)) {
 			i++;
 
@@ -463,11 +581,15 @@ struct Parser_State {
 
 			ast_return;
 		}
-
-		if (is_unary_op(tokens[i].type)) return unary_operation();
-
 		if (type_is(Token::Type::Identifier)) return identifier();
 		return litteral();
+	}
+
+	size_t factor() noexcept {
+		if (type_is(Token::Type::Identifier) && next_type_is(Token::Type::Open_Brace))
+			return initializer_list();
+
+		return postfix_operator();
 	}
 	#undef TT
 
@@ -534,6 +656,14 @@ struct Parser_State {
 			return idx;
 		} else if (type_is(Token::Type::If)) {
 			auto idx = if_condition();
+			if (type_is(Token::Type::Semicolon)) i++; // Optional semicolon
+			return idx;
+		} else if (type_is(Token::Type::For)) {
+			auto idx = for_loop();
+			if (type_is(Token::Type::Semicolon)) i++; // Optional semicolon
+			return idx;
+		} else if (type_is(Token::Type::While)) {
+			auto idx = while_loop();
 			if (type_is(Token::Type::Semicolon)) i++; // Optional semicolon
 			return idx;
 		} else /* assume expression */ {

@@ -59,28 +59,36 @@ struct Expressions {
 		Eq,
 		Neq,
 		And,
+		Mod,
 		Not,
+		Div,
+		Assign,
 		Amp,
-		Deref,
+		Inc,
+		Star,
 		Dot,
 		Or
 	};
 	static const char* op_to_string(Operator x) noexcept {
 		switch (x) {
-		case Operator::Minus: return "-";
-		case Operator::Plus:  return "+";
-		case Operator::Geq:   return ">=";
-		case Operator::Leq:   return "<=";
-		case Operator::Gt:    return ">";
-		case Operator::Lt:    return "<";
-		case Operator::Eq:    return "==";
-		case Operator::Neq:   return "!=";
-		case Operator::And:   return "&&";
-		case Operator::Or:    return "||";
-		case Operator::Not:   return "!";
-		case Operator::Dot:   return ".";
-		case Operator::Amp:   return "&";
-		case Operator::Deref: return "*";
+		case Operator::Minus:  return "-";
+		case Operator::Plus:   return "+";
+		case Operator::Geq:    return ">=";
+		case Operator::Leq:    return "<=";
+		case Operator::Gt:     return ">";
+		case Operator::Lt:     return "<";
+		case Operator::Mod:    return "%";
+		case Operator::Eq:     return "==";
+		case Operator::Neq:    return "!=";
+		case Operator::And:    return "&&";
+		case Operator::Or:     return "||";
+		case Operator::Not:    return "!";
+		case Operator::Inc:    return "++";
+		case Operator::Div:    return "/";
+		case Operator::Dot:    return ".";
+		case Operator::Amp:    return "&";
+		case Operator::Star:   return "*";
+		case Operator::Assign: return "=";
 		default: return "??";
 		}
 	}
@@ -100,7 +108,8 @@ struct Expressions {
 	};
 
 	struct Operation_List : Statement {
-		size_t operand_idx = 0;
+		size_t left_idx = 0;
+		size_t rest_idx = 0;
 		Operator op = Operator::Null;
 
 		virtual std::string string(
@@ -108,10 +117,9 @@ struct Expressions {
 		) const noexcept override {
 			std::string res;
 
-			res = expressions.nodes[operand_idx]->string(file, expressions);
+			res = expressions.nodes[left_idx]->string(file, expressions);
 
-			size_t idx = 0;
-			while ((idx = (!idx ? next_statement : expressions.nodes[idx]->next_statement))) {
+			for (size_t idx = rest_idx; idx; idx = expressions.nodes[idx]->next_statement) {
 				if (op != Operator::Dot) res += " ";
 				res += op_to_string(op);
 				if (op != Operator::Dot) res += " ";
@@ -164,7 +172,7 @@ struct Expressions {
 	};
 
 	struct Function_Call : Statement {
-		Token identifier;
+		size_t identifier_idx = 0;
 		size_t argument_list_idx = 0;
 
 		// Gather all the keyword lol
@@ -172,7 +180,8 @@ struct Expressions {
 			std::string_view file, const Expressions& expressions
 		) const noexcept override {
 			std::string res;
-			res += string_from_view(file, identifier.lexeme) + "(";
+			res += expressions.nodes[identifier_idx]->string(file, expressions);
+			res += "(";
 
 			auto idx = argument_list_idx;
 
@@ -367,6 +376,62 @@ struct Expressions {
 		}
 	};
 
+	struct For : Statement {
+		size_t init_statement_idx = 0;
+		size_t cond_statement_idx = 0;
+		size_t next_statement_idx = 0;
+		size_t loop_statement_idx = 0;
+
+		virtual std::string string(
+			std::string_view file, const Expressions& expressions
+		) const noexcept override {
+			std::string res = "for (";
+
+			res += expressions.nodes[init_statement_idx]->string(file, expressions);
+			res += "; ";
+			res += expressions.nodes[cond_statement_idx]->string(file, expressions);
+			res += "; ";
+			res += expressions.nodes[next_statement_idx]->string(file, expressions);
+			res += ") {\n";
+			
+			for (size_t idx = loop_statement_idx; idx; idx = expressions.nodes[idx]->next_statement)
+			{
+				auto line = expressions.nodes[idx]->string(file, expressions);
+				append_tab(1, line);
+				res += line + "\n";
+			}
+			
+			res += "}";
+
+			return res;
+		}
+	};
+
+	struct While : Statement {
+		size_t cond_statement_idx = 0;
+		size_t loop_statement_idx = 0;
+		
+		virtual std::string string(
+			std::string_view file, const Expressions& expressions
+		) const noexcept override {
+			std::string res = "while ";
+
+			res += expressions.nodes[cond_statement_idx]->string(file, expressions);
+			res += " {\n";
+			
+			for (size_t idx = loop_statement_idx; idx; idx = expressions.nodes[idx]->next_statement)
+			{
+				auto line = expressions.nodes[idx]->string(file, expressions);
+				append_tab(1, line);
+				res += line + "\n";
+			}
+			
+			res += "}";
+
+			return res;
+		}
+	};
+
 	#define LIST_AST_TYPE\
 		X(Parameter          )\
 		X(Argument           )\
@@ -381,6 +446,8 @@ struct Expressions {
 		X(Return_Call        )\
 		X(Type_Identifier    )\
 		X(If                 )\
+		X(For                )\
+		X(While              )\
 		X(Struct_Definition  )\
 		X(Initializer_List   )\
 		X(Function_Definition)
