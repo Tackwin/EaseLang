@@ -1,9 +1,11 @@
+
 #pragma once
 #include <string>
 #include <chrono>
 #include <stdio.h>
 #include <string.h>
 #include <string_view>
+#include <type_traits>
 #define println(x, ...) printf(x "\n", __VA_ARGS__)
 #define printlns(x) printf(x "\n")
 
@@ -50,3 +52,30 @@ static double seconds() noexcept {
 #define CONCAT_(x, y) x##y
 #define CONCAT(x, y) CONCAT_(x, y)
 #define defer details::Defer CONCAT(defer_, __COUNTER__) = [&]
+
+#define sum_type_X_Kind(x) , x##_Kind
+#define sum_type_X_Union(x) x x##_;
+#define sum_type_X_cst(x) if constexpr (std::is_same_v<T, x>) {\
+	kind = x##_Kind; new (&x##_) x; x##_ = (y);\
+}
+#define sum_type_X_case(x) case x##_Kind: new(&x##_) x; x##_ = that.x##_; break;
+#define sum_type_X_dst(x) case x##_Kind: x##_ .x::~x (); break;
+
+#define sum_type(name, list)\
+		enum Kind { None_Kind = 0 list(sum_type_X_Kind) } kind;\
+		union { list(sum_type_X_Union) };\
+		template<typename T> name(T y) noexcept { list(sum_type_X_cst) }\
+		~name() {\
+			switch(kind) {\
+				list(sum_type_X_dst)\
+				default: break;\
+			}\
+		}\
+		name(std::nullptr_t) noexcept { kind = None_Kind; }\
+		name(name&& that) noexcept {\
+			kind = that.kind;\
+			switch (kind) {\
+				list(sum_type_X_case)\
+				default: break;\
+			}\
+		}\

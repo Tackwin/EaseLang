@@ -39,7 +39,7 @@ std::any AST_Interpreter::interpret(
 	push_scope();
 	defer { pop_scope(); };
 
-	for (auto& [id, x] : f.parameters) variables.back()[(std::string)id] = x;
+	// for (auto& [id, x] : f.parameters) variables.back()[(std::string)id] = x;
 
 	std::any v;
 	for (size_t idx = f.start_idx; idx; idx = nodes[idx]->next_statement) {
@@ -71,21 +71,40 @@ std::any AST_Interpreter::init_list(AST_Nodes nodes, size_t idx, std::string_vie
 		auto type_name = string_view_from_view(
 			file, nodes[*node.type_identifier].Type_Identifier_.identifier.lexeme
 		);
-		auto type = lookup(type_name);
-		if (!typecheck<User_Struct>(type)) {
-			println("Error expected UserStruct got %s.", type.type().name());
+		auto type = type_lookup(type_name);
+		if (!typecheck<User_Type_Descriptor>(type)) {
+			println("Error expected User_Type_Descriptor got %s.", type.type().name());
 			return nullptr;
 		}
 
-		auto user_struct = std::any_cast<User_Struct>(type);
-		
+		auto user_struct = cast<User_Type_Descriptor>(type);
+		size_t mem_ptr = alloc(user_struct.byte_size);
+
 		for (
 			size_t idx = node.expression_list_idx, i = 0;
 			idx;
 			idx = nodes[idx]->next_statement, i++
-		) user_struct.member_values[i] = alloc(interpret(nodes, idx, file));
+		) {
+			size_t off = mem_ptr + user_struct.members[i].memory_idx;
+			// >TODO(Tackwin): typecheck this against the user struct definition.
+			auto value = interpret(nodes, idx, file);
+			if (typecheck<Identifier>(value)) {
+				deep_copy(cast<Identifier>(value), off);
+			} else {
+				// Here we have litterals like numbers and strings and functions and struct ...
 
-		return user_struct;
+				if (typecheck<long double>(value)) {
+					auto x = cast<long double>(value);
+					memcpy(memory.data() + off, &x, sizeof(x));
+				}
+			}
+		}
+
+		Identifier id;
+		id.type_descriptor_id = user_struct.unique_id;
+		id.memory_idx = mem_ptr;
+
+		return id;
 	}
 	printlns("Please specify the type explicitely.");
 
@@ -233,18 +252,17 @@ std::any AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view 
 			auto left = interpret(nodes, node.left_idx, file);
 			auto right = interpret(nodes, node.rest_idx, file);
 
-			if (typecheck<Identifier>(right)) right = at(cast<Identifier>(right));
-			
 			if (!typecheck<Identifier>(left)) {
 				println("Error expected Identifier for the lhs, got %s", left.type().name());
 				return nullptr;
 			}
-			if (!typecheck<long double>(right)) {
-				println("Error expected long double for the rhs, got %s", right.type().name());
-				return nullptr;
+			if (typecheck<Identifier>(right)) {
+				deep_copy(cast<Identifier>(right), cast<Identifier>(left).memory_idx);
+			} else if (typecheck<long double>(right)) {
+				auto x = cast<long double>(right);
+				
+				memcpy(memory.data() + cast<Identifier>(right).memory_idx, &x, sizeof(long double));
 			}
-
-			memory[cast<Identifier>(left).memory_idx] = right;
 
 			return right;
 		}
@@ -358,45 +376,44 @@ std::any AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view 
 		}
 		case AST::Operator::Dot: {
 			auto root_struct = interpret(nodes, node.left_idx, file);
-			if (typecheck<Identifier>(root_struct)) root_struct = at(cast<Identifier>(root_struct));
-			if (typecheck<Pointer   >(root_struct)) root_struct = at(cast<Pointer   >(root_struct));
-			if (!typecheck<User_Struct>(root_struct)) {
-				println("Expected a struct but got %s instead.", root_struct.type().name());
+			if (typecheck<Pointer   >(root_struct)) root_struct = at(cast<Pointer>(root_struct));
+			if (!typecheck<Identifier>(root_struct)) {
+				println("Expected an Identifier but got %s instead.", root_struct.type().name());
 				return nullptr;
 			}
 
 			auto helper =
-			[&] (const User_Struct& user_struct, size_t next, auto& helper) -> std::any {
+			[&] (const Identifier& user_struct, size_t next, auto& helper) -> std::any {
+
 				auto& next_node = nodes[next];
 				if (next_node.kind != AST::Node::Identifier_Kind) {
 					printlns("Error non identifier in the chain.");
 					return nullptr;
 				}
 
-				auto name = string_from_view(file, next_node.Identifier_.token.lexeme);
-				size_t i = 0;
-				while(i < user_struct.member_names.size() && user_struct.member_names[i] != name)
-					i++;
-
-				if (i == user_struct.member_names.size()) {
-					println("Error %s is not a member of this struct.", name.c_str());
+				if (types.count(user_struct.type_descriptor_id) == 0) {
+					printlns("Can't find user type.");
 					return nullptr;
 				}
 
-				auto x = at(user_struct.member_values[i]);
-				if (typecheck<Identifier>(x)) x = at(cast<Identifier>(x));
-				if (typecheck<Pointer   >(x)) x = at(cast<Pointer   >(x));
-				if (typecheck<User_Struct>(x)) {
-					return helper(
-						std::any_cast<User_Struct>(x), next_node.Identifier_.next_statement, helper
-					);
+				auto& struct_desc = types.at(user_struct.type_descriptor_id).User_Type_Descriptor_;
+				auto name = string_from_view(file, next_node.Identifier_.token.lexeme);
+				if (struct_desc.name_to_idx.count(name) == 0) {
+					println("Error %s is not a member of this struct.", name.c_str());
+					return nullptr;
 				}
+				auto idx = struct_desc.name_to_idx[name];
 
-				return x;
-
+				if (next_node.Identifier_.next_statement) {
+					return helper(
+						struct_desc.members[idx], next_node.Identifier_.next_statement, helper
+					);
+				} else {
+					return struct_desc.members[idx];
+				}
 			};
 
-			return helper(std::any_cast<User_Struct>(root_struct), node.rest_idx, helper);
+			return helper(cast<Identifier>(root_struct), node.rest_idx, helper);
 		}
 		default:{
 			println("Unsupported operation %s", AST::op_to_string(node.op));
@@ -490,15 +507,29 @@ std::any AST_Interpreter::while_loop(AST_Nodes nodes, size_t idx, std::string_vi
 std::any AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Struct_Definition_;
 
-	User_Struct x;
+	User_Type_Descriptor desc;
+
+	size_t running_offset = 0;
 	for (size_t idx = node.struct_line_idx; idx; idx = nodes[idx]->next_statement) {
 		auto& def = nodes[idx].Assignement_;
 		auto name = string_from_view(file, def.identifier.lexeme);
-		x.member_names.push_back(name);
-		x.member_values.push_back(alloc(interpret(nodes, def.value_idx, file)));
+
+		desc.name_to_idx[name] = desc.members.size();
+		Identifier new_member;
+
+		if (def.type_identifier) {
+			new_member.type_descriptor_id = interpret_type(nodes, *def.type_identifier, file);
+			new_member.memory_idx = running_offset;
+			running_offset += types.at(new_member.type_descriptor_id).get_size();
+		}
+
+		desc.default_values.push_back(nullptr);
+		if (def.value_idx) {
+			desc.default_values.back() = interpret(nodes, def.value_idx, file);
+		}
 	}
 
-	return x;
+	return desc;
 }
 
 std::any AST_Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
@@ -583,7 +614,8 @@ std::any AST_Interpreter::array_access(AST_Nodes nodes, size_t idx, std::string_
 		return nullptr;
 	}
 
-	return at(cast<Array>(id).values[std::roundl(cast<long double>(access_id))]);
+	return nullptr;
+	//return at(cast<Array>(id).values[std::roundl(cast<long double>(access_id))]);
 }
 
 std::any AST_Interpreter::return_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
@@ -629,8 +661,7 @@ std::any AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_v
 	}
 
 	auto x = interpret(nodes, node.value_idx, file);
-	if (typecheck<Identifier>(x)) x = at(cast<Identifier>(x));
-	variables.back()[name] = alloc(x);
+	if (typecheck<Identifier>(x)) deep_copy(cast<Identifier>(x), variables.back()[name].memory_idx);
 
 	return at(variables.back()[name]);
 }
@@ -700,12 +731,13 @@ void AST_Interpreter::print_value(const std::any& value) noexcept {
 std::any AST_Interpreter::lookup(std::string_view id) noexcept {
 	for (size_t i = variables.size() - 1; i + 1 > limit_scope.top(); --i)
 		for (auto& [x, v] : variables[i]) if (x == id) return at(v);
+	for (auto& [x, v] : builtins) if (x == id) return v;
 	println("Can not find variable named %.*s.", (int)id.size(), id.data());
 	return nullptr;
 }
 size_t AST_Interpreter::lookup_addr(std::string_view id) noexcept {
 	for (size_t i = variables.size() - 1; i + 1 > limit_scope.top(); --i)
-		for (auto& [x, v] : variables[i]) if (x == id) return v;
+		for (auto& [x, v] : variables[i]) if (x == id) return v.memory_idx;
 	println("Can not find variable named %.*s.", (int)id.size(), id.data());
 	return 0;
 }
@@ -730,7 +762,7 @@ void AST_Interpreter::push_builtin() noexcept {
 
 		return 0;
 	};
-	variables.back()["print"] = alloc(print);
+	builtins["print"] = print;
 
 	Builtin sleep;
 	sleep.f = [&] (std::vector<size_t> values) -> size_t {
@@ -749,7 +781,7 @@ void AST_Interpreter::push_builtin() noexcept {
 		);
 		return 0;
 	};
-	variables.back()["sleep"] = alloc(sleep);
+	builtins["sleep"] = sleep;
 
 	Builtin len;
 	len.f = [&] (std::vector<size_t> values) -> size_t {
@@ -765,14 +797,15 @@ void AST_Interpreter::push_builtin() noexcept {
 			return 0;
 		}
 
-		return alloc(cast<Array>(x).values.size());
+		return 0;
+		//return alloc(cast<Array>(x).values.size());
 	};
-	variables.back()["len"] = alloc(len);
+	builtins["len"] = len;
 }
 
 
 size_t AST_Interpreter::alloc(std::any x) noexcept {
-	memory.push_back(std::move(x));
+	// memory.push_back(std::move(x));
 	return memory.size() - 1;
 }
 

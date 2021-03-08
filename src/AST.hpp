@@ -130,6 +130,7 @@ struct AST {
 		}
 	};
 
+
 	struct Identifier : Statement {
 		Token token;
 
@@ -455,7 +456,7 @@ struct AST {
 		}
 	};
 
-	#define LIST_AST_TYPE\
+	#define LIST_AST_TYPE(X)\
 		X(Parameter          )\
 		X(Argument           )\
 		X(Expression         )\
@@ -476,39 +477,14 @@ struct AST {
 		X(Initializer_List   )\
 		X(Function_Definition)
 
+
 	struct Node {
-		enum Kind {
-			None_Kind = 0
-			#define X(x) , x##_Kind
-			LIST_AST_TYPE
-			#undef X
-		} kind;
-		union {
-			#define X(x) x x##_;
-			LIST_AST_TYPE
-			#undef X
-		};
-
-		#define X(x) Node(x y) noexcept { kind = x##_Kind; new (&x##_) x; x##_ = (y); }
-		LIST_AST_TYPE
-		#undef X
-
-		Node(std::nullptr_t) noexcept { kind = None_Kind; }
-
-		Node(Node&& that) noexcept {
-			kind = that.kind;
-			switch (kind) {
-				#define X(x) case x##_Kind: new(&x##_) x; x##_ = that.x##_; break;
-				LIST_AST_TYPE
-				#undef X
-				default: break;
-			}
-		}
+		sum_type(Node, LIST_AST_TYPE);
 
 		const Statement* operator->() const noexcept {
 			switch (kind) {
 				#define X(x) case x##_Kind: return &x##_;
-				LIST_AST_TYPE
+				LIST_AST_TYPE(X)
 				#undef X
 				default: return nullptr;
 			}
@@ -516,7 +492,7 @@ struct AST {
 		Statement* operator->() noexcept {
 			switch (kind) {
 				#define X(x) case x##_Kind: return &x##_;
-				LIST_AST_TYPE
+				LIST_AST_TYPE(X)
 				#undef X
 				default: return nullptr;
 			}

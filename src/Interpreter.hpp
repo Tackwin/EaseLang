@@ -8,16 +8,58 @@
 #include <string_view>
 #include <unordered_map>
 #include "AST.hpp"
+#include "xstd.hpp"
 
 // I guess you can't forward decl nested struct in c++ :)))))
 // struct AST { struct Node; };
 struct AST_Interpreter {
 
-	std::vector<std::any> memory;
+	struct Identifier {
+		size_t memory_idx = 0;
+		size_t type_descriptor_id = 0;
+	};
+	struct Pointer : Identifier { };
+	struct Array   : Identifier { size_t length = 0; };
+
+	struct Void { };
+	struct Real { };
+	struct Int  { };
+	struct User_Type_Descriptor {
+		size_t unique_id = 0;
+		size_t byte_size = 8;
+
+		std::unordered_map<std::string, size_t> name_to_idx;
+		std::vector<Identifier> members;
+		std::vector<std::any> default_values;
+	};
+	struct Pointer_Type { size_t user_type_descriptor_idx = 0; };
+	struct Array_Type   { size_t user_type_descriptor_idx = 0; size_t length = 0; };
+
+	#define LIST_TYPES(X)\
+		X(Void) X(Real) X(Int) X(User_Type_Descriptor) X(Pointer_Type) X(Array_Type)
+
+	struct Type {
+		sum_type(Type, LIST_TYPES);
+	
+		size_t get_size() noexcept {
+			switch (kind) {
+			case Void_Kind: return 0;
+			case Real_Kind: return 8;
+			case Int_Kind:  return 8;
+			case Pointer_Type_Kind : return 8;
+			case Array_Type_Kind   : return 8 + 8;
+			case User_Type_Descriptor_Kind:  return User_Type_Descriptor_.byte_size;
+			default: return 0;
+			}
+		}
+	};
+
+	std::vector<std::uint8_t> memory;
+	std::unordered_map<size_t, Type> types;
 
 	// >PERF(Tackwin): std::string as key of unordered_map :'(
 	// Ordered from out most scope to in most scope.
-	std::vector<std::unordered_map<std::string, size_t>> variables;
+	std::vector<std::unordered_map<std::string, Identifier>> variables;
 	std::stack<size_t> limit_scope;
 
 	struct Function_Definition {
@@ -31,34 +73,10 @@ struct AST_Interpreter {
 	struct Builtin {
 		std::function<size_t(std::vector<size_t>)> f;
 	};
+	std::unordered_map<std::string, Builtin> builtins;
 
 	struct Return_Call {
 		std::vector<size_t> values;
-	};
-
-	struct Void {};
-
-	struct Identifier {
-		size_t memory_idx = 0;
-	};
-
-	struct Type_Descriptor {
-		size_t byte_size = 8;
-
-		std::unordered_map<std::string, size_t> member_offset;
-	};
-
-	struct Pointer {
-		size_t memory_idx = 0;
-	};
-
-	struct Array {
-		std::vector<size_t> values;
-	};
-
-	struct User_Struct {
-		std::vector<std::string> member_names;
-		std::vector<size_t>      member_values;
 	};
 
 	using AST_Nodes = const std::vector<AST::Node>&;
@@ -81,16 +99,21 @@ struct AST_Interpreter {
 	std::any struct_def   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any init_list    (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 
-
 	std::any interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any interpret(
 		AST_Nodes nodes, const Function_Definition& f, std::string_view file
 	) noexcept;
 
+	size_t interpret_type(AST_Nodes nodes, size_t idx, std::string_view file) noexcept { return 0; }
+
+	std::any type_lookup(std::string_view id) noexcept;
 	std::any lookup(std::string_view id) noexcept;
 	size_t   lookup_addr(std::string_view id) noexcept;
 
 	size_t alloc(std::any x) noexcept;
+	size_t alloc(size_t n_bytes) noexcept {return 0;}
+	void deep_copy(Identifier from, size_t to) noexcept {}
+
 	std::any at(size_t idx) noexcept;
 	std::any at(Identifier id) noexcept { return at(id.memory_idx); }
 	std::any at(Pointer ptr) noexcept { return at(ptr.memory_idx); }
@@ -106,5 +129,5 @@ struct AST_Interpreter {
 
 	void push_builtin() noexcept;
 
-	AST_Interpreter() noexcept { memory.push_back(nullptr); push_scope(); limit_scope.push(0); }
+	AST_Interpreter() noexcept { memory.push_back(0); push_scope(); limit_scope.push(0); }
 };
