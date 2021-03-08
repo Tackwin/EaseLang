@@ -42,8 +42,18 @@ struct AST_Interpreter {
 		size_t memory_idx = 0;
 	};
 
+	struct Type_Descriptor {
+		size_t byte_size = 8;
+
+		std::unordered_map<std::string, size_t> member_offset;
+	};
+
 	struct Pointer {
 		size_t memory_idx = 0;
+	};
+
+	struct Array {
+		std::vector<size_t> values;
 	};
 
 	struct User_Struct {
@@ -66,6 +76,7 @@ struct AST_Interpreter {
 	std::any while_loop   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any function     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	std::any array_access (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any return_call  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any struct_def   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	std::any init_list    (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;

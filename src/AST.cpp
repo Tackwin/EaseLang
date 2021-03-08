@@ -1,4 +1,5 @@
 
+
 #include "AST.hpp"
 
 #include "xstd.hpp"
@@ -559,6 +560,19 @@ struct Parser_State {
 				
 				ast_return_(y);
 			}
+			if (type_is(Token::Type::Open_Brack)) {
+				i++;
+				AST::Array_Access y;
+				y.scope = x.scope;
+				y.depth = x.depth;
+				y.identifier_array_idx = x.right_idx;
+				y.identifier_acess_idx = expression();
+
+				if (!type_is(Token::Type::Close_Brack)) return 0;
+				i++;
+
+				ast_return_(y);
+			}
 			return x.right_idx;
 		}
 
@@ -605,12 +619,14 @@ struct Parser_State {
 		if (!type_is(Token::Type::Identifier)) return 0;
 		x.identifier = tokens[i++];
 
-		// then we can have arbitrary nested combinations of const and *
+		// then we can have arbitrary nested combinations of const, [], and *
 		// every time we have a *, it means there is an indirection. We push our current
 		// Type_Identifier and we construct a new one with it's pointer_to pointing to the index
 		// of the just pushed Type_Identifier.
 
-		while (type_is_any({ Token::Type::Const, Token::Type::Star })) {
+		while (type_is_any({
+			Token::Type::Const, Token::Type::Star, Token::Type::Open_Brack
+		})) {
 			if (type_is(Token::Type::Const)) {
 				i++;
 				x.is_const = true;
@@ -620,12 +636,29 @@ struct Parser_State {
 				i++;
 
 				auto x_idx = exprs.nodes.size();
-				exprs.nodes.push_back(std::move(x));
+				exprs.nodes.push_back(x);
 				x = AST::Type_Identifier();
 				x.scope = current_scope;
 				x.depth = current_depth++;
 
 				x.pointer_to = x_idx;
+			}
+
+			if (type_is(Token::Type::Open_Brack)) {
+				i++;
+
+				auto x_idx = exprs.nodes.size();
+				exprs.nodes.push_back(std::move(x));
+				x = AST::Type_Identifier();
+				x.scope = current_scope;
+				x.depth = current_depth++;
+
+				x.array_to = x_idx;
+				x.array_size = expression();
+
+
+				if (!type_is(Token::Type::Close_Brack)) return 0;
+				i++;
 			}
 		}
 

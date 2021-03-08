@@ -144,6 +144,8 @@ struct AST {
 
 		Token identifier;
 		bool is_const = false;
+		std::optional<size_t> array_to = std::nullopt;
+		std::optional<size_t> array_size = std::nullopt;
 		std::optional<size_t> pointer_to = std::nullopt;
 
 		virtual std::string string(
@@ -154,6 +156,11 @@ struct AST {
 			if (pointer_to) {
 				res = expressions.nodes[*pointer_to]->string(file, expressions);
 				res += "*";
+			} else if (array_to) {
+				res = expressions.nodes[*array_to]->string(file, expressions);
+				res += "[";
+				res += expressions.nodes[*array_size]->string(file, expressions);
+				res += "]";
 			} else {
 				res = string_from_view(file, identifier.lexeme);
 			}
@@ -191,6 +198,22 @@ struct AST {
 				if (idx) res += ", ";
 			}
 			res += ")";
+			return res;
+		}
+	};
+
+	struct Array_Access : Statement {
+		size_t identifier_array_idx = 0;
+		size_t identifier_acess_idx = 0;
+
+		virtual std::string string(
+			std::string_view file, const AST& expressions
+		) const noexcept override {
+			std::string res;
+			res += expressions.nodes[identifier_array_idx]->string(file, expressions);
+			res += "[";
+			res += expressions.nodes[identifier_acess_idx]->string(file, expressions);
+			res += "]";
 			return res;
 		}
 	};
@@ -440,6 +463,7 @@ struct AST {
 		X(Assignement        )\
 		X(Identifier         )\
 		X(Litteral           )\
+		X(Array_Access       )\
 		X(Function_Call      )\
 		X(Operation_List     )\
 		X(Unary_Operation    )\

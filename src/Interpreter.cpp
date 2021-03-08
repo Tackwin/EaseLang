@@ -28,6 +28,7 @@ std::any AST_Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_vie
 	case AST::Node::Return_Call_Kind:         return return_call  (nodes, idx, file);
 	case AST::Node::Struct_Definition_Kind:   return struct_def   (nodes, idx, file);
 	case AST::Node::Initializer_List_Kind:    return init_list    (nodes, idx, file);
+	case AST::Node::Array_Access_Kind:        return array_access (nodes, idx, file);
 	default:                        return nullptr;
 	}
 }
@@ -404,20 +405,6 @@ std::any AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view 
 	}
 }
 
-std::any AST_Interpreter::factor(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
-	auto& node = nodes[idx];
-	#define EA AST::Node
-	switch (nodes[idx].kind) {
-		default:                       return litteral  (nodes, idx, file);
-		case EA::Unary_Operation_Kind: return unary_op  (nodes, idx, file);
-		case EA::Identifier_Kind:      return identifier(nodes, idx, file);
-		case EA::Expression_Kind:      return expression(nodes, idx, file);
-		case EA::Function_Call_Kind:   return function_call(nodes, idx, file);
-
-	}
-	#undef EA
-}
-
 std::any AST_Interpreter::if_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].If_;
 
@@ -578,6 +565,27 @@ std::any AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string
 	return interpret(nodes, *f, file);
 }
 
+std::any AST_Interpreter::array_access(AST_Nodes nodes, size_t idx, std::string_view file) noexcept
+{
+	auto& node = nodes[idx].Array_Access_;
+
+	auto id = interpret(nodes, node.identifier_array_idx, file);
+	if (typecheck<Identifier>(id)) id = at(cast<Identifier>(id));
+	if (!typecheck<Array>(id)) {
+		println("Error expected Array got %s.", id.type().name());
+		return nullptr;
+	}
+
+	auto access_id = interpret(nodes, node.identifier_acess_idx, file);
+	if (typecheck<Identifier>(access_id)) access_id = at(cast<Identifier>(access_id));
+	if (!typecheck<long double>(access_id)) {
+		println("Error expected long double got %s.", access_id.type().name());
+		return nullptr;
+	}
+
+	return at(cast<Array>(id).values[std::roundl(cast<long double>(access_id))]);
+}
+
 std::any AST_Interpreter::return_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Return_Call_;
 
@@ -609,6 +617,9 @@ std::any AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_v
 	auto& node = nodes[idx].Assignement_;
 
 	// >TODO(Tackwin): handle type info.
+	if (node.type_identifier) {
+	}
+
 	auto name = string_from_view(file, node.identifier.lexeme);
 
 	if (variables.empty()) variables.push_back({});
@@ -739,6 +750,24 @@ void AST_Interpreter::push_builtin() noexcept {
 		return 0;
 	};
 	variables.back()["sleep"] = alloc(sleep);
+
+	Builtin len;
+	len.f = [&] (std::vector<size_t> values) -> size_t {
+		if (values.size() != 1) {
+			println("len expect 1 Array argument, got %zu arguments.", values.size());
+			return 0;
+		}
+
+		auto x = at(values.front());
+		if (typecheck<Identifier>(x)) x = at(cast<Identifier>(x));
+		if (!typecheck<Array>(x)) {
+			println("Len expect a array argument, got %s.", x.type().name());
+			return 0;
+		}
+
+		return alloc(cast<Array>(x).values.size());
+	};
+	variables.back()["len"] = alloc(len);
 }
 
 
