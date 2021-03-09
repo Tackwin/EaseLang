@@ -19,6 +19,10 @@ static void append_tab(size_t n, std::string& str) noexcept {
 	for (size_t i = 0; i < str.size() - 1; ++i) if (str[i] == '\n') str.insert(i + 1, n, '\t');
 }
 
+static size_t hash_combine(size_t a, size_t b) noexcept {
+	return a ^ b + 0x9e3779b9 + (a << 6) + (a >> 2);
+}
+
 static std::string string_from_view(std::string_view src, View view) noexcept {
 	std::string str;
 	str.resize(view.size);
@@ -58,13 +62,15 @@ static double seconds() noexcept {
 #define sum_type_X_cst(x) if constexpr (std::is_same_v<T, x>) {\
 	kind = x##_Kind; new (&x##_) x; x##_ = (y);\
 }
-#define sum_type_X_case(x) case x##_Kind: new(&x##_) x; x##_ = that.x##_; break;
+#define sum_type_X_case_cpy(x) case x##_Kind: new(&x##_) x; x##_ = that.x##_; break;
+#define sum_type_X_case_mve(x) case x##_Kind: new(&x##_) x; x##_ = std::move(that.x##_); break;
 #define sum_type_X_dst(x) case x##_Kind: x##_ .x::~x (); break;
 
 #define sum_type(name, list)\
 		enum Kind { None_Kind = 0 list(sum_type_X_Kind) } kind;\
 		union { list(sum_type_X_Union) };\
-		template<typename T> name(T y) noexcept { list(sum_type_X_cst) }\
+		name() noexcept { kind = None_Kind; }\
+		template<typename T> name(const T& y) noexcept { list(sum_type_X_cst) }\
 		~name() {\
 			switch(kind) {\
 				list(sum_type_X_dst)\
@@ -75,7 +81,31 @@ static double seconds() noexcept {
 		name(name&& that) noexcept {\
 			kind = that.kind;\
 			switch (kind) {\
-				list(sum_type_X_case)\
+				list(sum_type_X_case_mve)\
 				default: break;\
 			}\
 		}\
+		name(const name& that) noexcept {\
+			kind = that.kind;\
+			switch (kind) {\
+				list(sum_type_X_case_cpy)\
+				default: break;\
+			}\
+		}\
+		name& operator=(const name& that) noexcept {\
+			kind = that.kind;\
+			switch (kind) {\
+				list(sum_type_X_case_cpy)\
+				default: break;\
+			}\
+			return *this;\
+		}\
+		name& operator=(name&& that) noexcept {\
+			kind = that.kind;\
+			switch (kind) {\
+				list(sum_type_X_case_mve)\
+				default: break;\
+			}\
+			return *this;\
+		}\
+

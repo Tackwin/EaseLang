@@ -19,8 +19,16 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 	size_t current_line = 0;
 	size_t start_line = 0;
 
+	auto isspace = [] (char c) {
+		if (c == 0) return true;
+		if (c == 9) return true;
+		if (10 <= c && c <= 13) return true;
+		if (c == 32) return true;
+		return false;
+	};
+
 	auto advance = [&] {
-		for (; i < str.size() && std::isspace(str[i]); ++i) {
+		for (; i < str.size() && isspace(str[i]); ++i) {
 			if (str[i] == '\n') {
 				start_line = i + 1;
 				current_line++;

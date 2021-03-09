@@ -34,10 +34,12 @@ int main(int argc, char** argv) noexcept {
 	}
 
 	auto exprs = parse(tokens, file);
-	printf("Parsed\n");
+	printf("Parsed\n\n");
 
 	for (auto& x : exprs.nodes) if (x.kind && x->depth == 0)
 		printf("%s;\n", x->string(file, exprs).c_str());
+
+	printf("Prettyied\n\n");
 
 	AST_Interpreter ast_interpreter;
 	ast_interpreter.push_builtin();
