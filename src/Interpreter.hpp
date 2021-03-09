@@ -17,18 +17,37 @@ struct AST_Interpreter {
 		size_t memory_idx = 0;
 		size_t type_descriptor_id = 0;
 	};
-	struct Pointer : Identifier {};
+	struct Pointer {
+		size_t memory_idx = 0;
+		size_t type_descriptor_id = 0;
+	};
+	struct Real {
+		long double x = 0;
+	};
+	struct Bool {
+		bool x = false;
+	};
+	struct Return_Call {
+		std::vector<Identifier> values;
+	};
+	struct Builtin {
+		std::function<Identifier(std::vector<Identifier>)> f;
+	};
+
+	#define LIST_LANG_VALUE(X) X(Identifier) X(Pointer) X(Real) X(Return_Call) X(Bool) X(Builtin)
+	struct Value { sum_type(Value, LIST_LANG_VALUE); };
 
 
-	struct Void   { static constexpr size_t unique_id = 0; };
-	struct Real   { static constexpr size_t unique_id = 1; };
-	struct Int    { static constexpr size_t unique_id = 2; };
+	struct Void_Type   { static constexpr size_t unique_id = 0; };
+	struct Real_Type   { static constexpr size_t unique_id = 1; };
+	struct Int_Type    { static constexpr size_t unique_id = 2; };
+	struct Bool_Type   { static constexpr size_t unique_id = 3; };
 	struct Pointer_Type {
-		static constexpr size_t unique_id = 3;
+		static constexpr size_t unique_id = 4;
 		size_t user_type_descriptor_idx = 0;
 	};
 	struct Array_Type {
-		static constexpr size_t unique_id = 4;
+		static constexpr size_t unique_id = 5;
 		size_t user_type_descriptor_idx = 0;
 		size_t length = 0;
 	};
@@ -40,7 +59,7 @@ struct AST_Interpreter {
 
 		std::vector<size_t>           return_type;
 	};
-	struct User_Type_Descriptor {
+	struct User_Struct_Type {
 		size_t unique_id = 0;
 		size_t byte_size = 8;
 
@@ -50,106 +69,94 @@ struct AST_Interpreter {
 		std::vector<std::any> default_values;
 	};
 
-	#define LIST_TYPES(X)\
-		X(Void) X(Real) X(Int) X(User_Type_Descriptor) X(User_Function_Type)\
-		X(Pointer_Type) X(Array_Type)
+	#define LIST_LANG_TYPES(X)\
+		X(Void_Type) X(Real_Type) X(Int_Type) X(User_Struct_Type) X(User_Function_Type)\
+		X(Pointer_Type) X(Array_Type) X(Bool_Type)
 
 	struct Type {
-		sum_type(Type, LIST_TYPES);
+		sum_type(Type, LIST_LANG_TYPES);
 	
 		size_t get_size() noexcept {
 			switch (kind) {
-			case Void_Kind: return 0;
-			case Real_Kind: return sizeof(long double);
-			case Int_Kind:  return sizeof(std::int64_t);
+			case Void_Type_Kind: return 0;
+			case Real_Type_Kind: return sizeof(long double);
+			case Int_Type_Kind:  return sizeof(std::int64_t);
 			case Pointer_Type_Kind : return sizeof(size_t);
 			case Array_Type_Kind   : return sizeof(size_t) + sizeof(size_t);
-			case User_Type_Descriptor_Kind:  return User_Type_Descriptor_.byte_size;
+			case User_Struct_Type_Kind:  return User_Struct_Type_.byte_size;
 			default: return 0;
 			}
 		}
 
 		size_t get_unique_id() noexcept {
 			switch (kind) {
-			case Void_Kind: return Void::unique_id;
-			case Real_Kind: return Real::unique_id;
-			case Int_Kind:  return Int::unique_id;
+			case Void_Type_Kind: return Void_Type::unique_id;
+			case Real_Type_Kind: return Real_Type::unique_id;
+			case Int_Type_Kind:  return Int_Type::unique_id;
 			case Pointer_Type_Kind : return Pointer_Type::unique_id;
 			case Array_Type_Kind   : return Array_Type::unique_id;
-			case User_Type_Descriptor_Kind:  return User_Type_Descriptor_.unique_id;
+			case User_Struct_Type_Kind:  return User_Struct_Type_.unique_id;
 			default: return 0;
 			}
-		}
-
-		const char* name() noexcept {
-			#define X(x) case x##_Kind: return #x;
-			switch(kind) { LIST_TYPES(X) default: return "??"; };
-			#undef X
 		}
 	};
 
 	std::vector<std::uint8_t> memory;
 	std::unordered_map<std::string, size_t> type_name_to_hash;
 	std::unordered_map<size_t, Type> types;
-	size_t Type_N = 0;
+	size_t Type_N = 5;
 
 	// >PERF(Tackwin): std::string as key of unordered_map :'(
 	// Ordered from out most scope to in most scope.
-	std::vector<std::unordered_map<std::string, Identifier>> variables;
+	std::vector<std::unordered_map<std::string, Value>> variables;
 
-
-	struct Builtin {
-		std::function<Identifier(std::vector<Identifier>)> f;
-	};
 	std::unordered_map<std::string, Builtin> builtins;
-
-	struct Return_Call {
-		std::vector<Identifier> values;
-	};
 
 	using AST_Nodes = const std::vector<AST::Node>&;
 
-	std::any litteral     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any unary_op     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any list_op      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any factor       (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any expression   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any identifier   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any assignement  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any if_call      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any for_loop     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any while_loop   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any function     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any array_access (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any return_call  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any struct_def   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any init_list    (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value litteral     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value unary_op     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value list_op      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value factor       (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value expression   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value identifier   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value assignement  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value if_call      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value for_loop     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value while_loop   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value array_access (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value return_call  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value init_list    (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 
-	Type     type_ident   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Type  function     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Type  type_ident   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Type  struct_def   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 
-	std::any interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	std::any interpret(
+	Type  type_interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value      interpret(AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value      interpret(
 		AST_Nodes nodes, const User_Function_Type& f, std::string_view file
 	) noexcept;
 
-	Type type_lookup(std::string_view id) noexcept;
-	std::any lookup(std::string_view id) noexcept;
-	size_t   lookup_addr(std::string_view id) noexcept;
+	Type  type_lookup(std::string_view id) noexcept;
+	Value      lookup(std::string_view id) noexcept;
 
 	size_t alloc(size_t n_byte) noexcept;
-	size_t push(std::any x) noexcept;
-	size_t copy(std::any from, size_t to) noexcept;
+	size_t copy(const Value& from, size_t to) noexcept;
 
-	std::any at(Identifier id) noexcept;
-	size_t read_ptr(size_t at) noexcept;
+	Value at(Identifier id) noexcept;
+	size_t read_ptr(size_t ptr) noexcept;
+	void write_ptr(size_t ptr, size_t to) noexcept;
 
 	void push_scope() noexcept;
 	void pop_scope() noexcept;
 
-	void print_value(const std::any& value) noexcept;
+	void print_value(const Value& value) noexcept;
 
 	void push_builtin() noexcept;
+
+	size_t get_type_id(const Value& x) noexcept;
 
 	AST_Interpreter() noexcept { memory.push_back(0); push_scope(); }
 };

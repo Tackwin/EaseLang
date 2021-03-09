@@ -4,6 +4,7 @@
 #include <chrono>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include <string_view>
 #include <type_traits>
 #define println(x, ...) printf(x "\n", __VA_ARGS__)
@@ -65,34 +66,36 @@ static double seconds() noexcept {
 #define sum_type_X_case_cpy(x) case x##_Kind: new(&x##_) x; x##_ = that.x##_; break;
 #define sum_type_X_case_mve(x) case x##_Kind: new(&x##_) x; x##_ = std::move(that.x##_); break;
 #define sum_type_X_dst(x) case x##_Kind: x##_ .x::~x (); break;
+#define sum_type_X_name(x) case x##_Kind: return #x;
+#define sum_type_X_cast(x) if constexpr (std::is_same_v<T, x>) { return x##_; }
 
-#define sum_type(name, list)\
+#define sum_type(n, list)\
 		enum Kind { None_Kind = 0 list(sum_type_X_Kind) } kind;\
 		union { list(sum_type_X_Union) };\
-		name() noexcept { kind = None_Kind; }\
-		template<typename T> name(const T& y) noexcept { list(sum_type_X_cst) }\
-		~name() {\
+		n() noexcept { kind = None_Kind; }\
+		template<typename T> n(const T& y) noexcept { list(sum_type_X_cst) }\
+		~n() {\
 			switch(kind) {\
 				list(sum_type_X_dst)\
 				default: break;\
 			}\
 		}\
-		name(std::nullptr_t) noexcept { kind = None_Kind; }\
-		name(name&& that) noexcept {\
+		n(std::nullptr_t) noexcept { kind = None_Kind; }\
+		n(n&& that) noexcept {\
 			kind = that.kind;\
 			switch (kind) {\
 				list(sum_type_X_case_mve)\
 				default: break;\
 			}\
 		}\
-		name(const name& that) noexcept {\
+		n(const n& that) noexcept {\
 			kind = that.kind;\
 			switch (kind) {\
 				list(sum_type_X_case_cpy)\
 				default: break;\
 			}\
 		}\
-		name& operator=(const name& that) noexcept {\
+		n& operator=(const n& that) noexcept {\
 			kind = that.kind;\
 			switch (kind) {\
 				list(sum_type_X_case_cpy)\
@@ -100,7 +103,7 @@ static double seconds() noexcept {
 			}\
 			return *this;\
 		}\
-		name& operator=(name&& that) noexcept {\
+		n& operator=(n&& that) noexcept {\
 			kind = that.kind;\
 			switch (kind) {\
 				list(sum_type_X_case_mve)\
@@ -108,4 +111,23 @@ static double seconds() noexcept {
 			}\
 			return *this;\
 		}\
-
+		const char* name() const noexcept {\
+			switch (kind) {\
+				list(sum_type_X_name)\
+				default: break;\
+			}\
+			return "??";\
+		}\
+		bool typecheck(n::Kind k) const noexcept { return kind == k; }\
+		template<typename T>\
+		const T& cast() const noexcept {\
+			list(sum_type_X_cast)\
+			assert("Yeah no.");\
+			return *reinterpret_cast<const T*>(this);\
+		}\
+		template<typename T>\
+		T cast() noexcept {\
+			list(sum_type_X_cast)\
+			assert("Yeah no.");\
+			return *reinterpret_cast<T*>(this);\
+		}

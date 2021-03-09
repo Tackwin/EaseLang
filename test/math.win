@@ -9,8 +9,10 @@ rect2 := struct {
 };
 
 main := proc () {
-	r := rect2{vect2{0, 0}, vect2{1, 2}};
-	print("Rect2", r.pos.x, r.pos.y, r.size.x, r.size.y);
+	r     := rect2{vect2{1, 2}, vect2{3, 4}};
+	r_ptr := &r;
+	print(r.pos.x, r.pos.y, r.size.x, r.size.y);
+	print(r_ptr.pos.x, r_ptr.pos.y, r_ptr.size.x, r_ptr.size.y);
 };
 
 main();
