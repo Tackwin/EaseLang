@@ -652,7 +652,7 @@ Value AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vi
 	auto f = &types.at(id.type_descriptor_id).User_Function_Type_;
 	for (size_t i = 0; i < arguments.size(); ++i) {
 		auto name = f->parameter_name[i];
-		variables.back()[(std::string)name] = arguments[i];
+		variables.back()[name] = arguments[i];
 	}
 
 	return interpret(nodes, *f, file);
@@ -889,8 +889,8 @@ void AST_Interpreter::print_value(const Value& value) noexcept {
 }
 
 Value AST_Interpreter::lookup(std::string_view id) noexcept {
-	for (size_t i = variables.size() - 1; i + 1 > 0; --i)
-		for (auto& [x, v] : variables[i]) if (x == id) return v;
+	for (auto it = std::rbegin(variables); it != std::rend(variables); it++)
+		for (auto& [x, v] : *it) if (x == id) return v;
 	for (auto& [x, v] : builtins) if (x == id) return v;
 	println("Can not find variable named %.*s.", (int)id.size(), id.data());
 	return nullptr;

@@ -20,13 +20,22 @@ Build build(Flags flags) noexcept {
 
 	b.no_warnings_win32();
 	if (Env::Win32 && flags.generate_debug) {
-		b.add_debug_defines();
-		b.add_library("libucrtd");
-		b.add_library("libvcruntimed");
-		b.add_library("libcmtd");
-		b.add_library("libcpmtd");
-		b.add_library("libconcrtd");
-		b.add_library("Kernel32");
+		if (flags.release) {
+			b.add_library("libucrt");
+			b.add_library("libvcruntime");
+			b.add_library("libcmt");
+			b.add_library("libcpmt");
+			b.add_library("libconcrt");
+			b.add_library("Kernel32");
+		} else {
+			b.add_debug_defines();
+			b.add_library("libucrtd");
+			b.add_library("libvcruntimed");
+			b.add_library("libcmtd");
+			b.add_library("libcpmtd");
+			b.add_library("libconcrtd");
+			b.add_library("Kernel32");
+		}
 	}
 
 	return b;
