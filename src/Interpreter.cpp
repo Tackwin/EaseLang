@@ -81,19 +81,30 @@ Value AST_Interpreter::init_list(AST_Nodes nodes, size_t idx, std::string_view f
 					interpret(nodes, node.expression_list_idx, file), new_identifier.memory_idx
 				);
 				break;
-			case Type::Array_Type_Kind:
+			case Type::Array_View_Type_Kind: {
+				size_t array_data = alloc(
+					type.Array_View_Type_.length *
+					types.at(type.Array_View_Type_.user_type_descriptor_idx).get_size()
+				);
+				
 				for (
 					size_t idx = node.expression_list_idx, i = 0;
 					idx;
 					idx = nodes[idx]->next_statement, i++
 				) {
-					auto underlying_type = types[type.Array_Type_.user_type_descriptor_idx];
+					auto underlying_type = types[type.Array_View_Type_.user_type_descriptor_idx];
 					copy(
 						interpret(nodes, idx, file),
-						new_identifier.memory_idx + i * underlying_type.get_size()
+						array_data + i * underlying_type.get_size()
 					);
 				}
+
+				Array_View x;
+				x.length = type.Array_View_Type_.length;
+				x.memory_idx = array_data;
+				copy(x, new_identifier.memory_idx);
 				break;
+			}
 			case Type::User_Struct_Type_Kind: {
 				auto& user_struct = type.User_Struct_Type_;
 
@@ -623,21 +634,7 @@ Value AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vi
 	for (size_t idx = node.argument_list_idx, i = 0; idx; idx = nodes[idx]->next_statement, i++) {
 		auto& param = nodes[idx].Argument_;
 		auto x = interpret(nodes, param.value_idx, file);
-		Identifier new_ident;
-		if (x.typecheck(Value::Real_Kind)) {
-			new_ident.type_descriptor_id = Real_Type::unique_id;
-			new_ident.memory_idx = alloc(sizeof(long double));
-		}
-		if (x.typecheck(Value::Pointer_Kind)) {
-			new_ident.type_descriptor_id = x.cast<Pointer>().type_descriptor_id;
-			new_ident.memory_idx = alloc(sizeof(size_t));
-		}
-		if (x.typecheck(Value::Identifier_Kind)) {
-			new_ident.type_descriptor_id = x.cast<Identifier>().type_descriptor_id;
-			new_ident.memory_idx = alloc(types.at(new_ident.type_descriptor_id).get_size());
-		}
-		copy(x, new_ident.memory_idx);
-		arguments.push_back(new_ident);
+		arguments.push_back(create_id(x));
 	}
 
 	auto any_id = interpret(nodes, node.identifier_idx, file);
@@ -690,26 +687,7 @@ Value AST_Interpreter::return_call(AST_Nodes nodes, size_t idx, std::string_view
 	Return_Call r;
 	if (node.return_value_idx) {
 		auto x = interpret(nodes, node.return_value_idx, file);
-
-		Identifier new_ident;
-
-		if (x.typecheck(Value::Real_Kind)) {
-			new_ident.memory_idx = alloc(sizeof(long double));
-			new_ident.type_descriptor_id = Real_Type::unique_id;
-		}
-		if (x.typecheck(Value::Pointer_Kind)) {
-			new_ident.memory_idx = alloc(sizeof(size_t));
-			new_ident.type_descriptor_id = x.cast<Pointer>().type_descriptor_id;
-		}
-		if (x.typecheck(Value::Identifier_Kind)) {
-			new_ident.memory_idx =
-				alloc(types.at(x.cast<Identifier>().type_descriptor_id).get_size());
-			new_ident.type_descriptor_id = x.cast<Identifier>().type_descriptor_id;
-		}
-
-		copy(x, new_ident.memory_idx);
-
-		r.values.push_back(new_ident);
+		r.values.push_back(create_id(x));
 	}
 
 	return r;
@@ -729,9 +707,21 @@ Type AST_Interpreter::create_pointer_type(size_t underlying) noexcept {
 	Pointer_Type new_pointer_type;
 	new_pointer_type.unique_id = hash;
 	new_pointer_type.user_type_descriptor_idx = underlying;
+	types[hash] = new_pointer_type;
 	return new_pointer_type;
 }
 
+Type AST_Interpreter::create_array_view_type(size_t underlying, size_t size) noexcept {
+	auto hash = hash_combine(underlying, Array_View_Type::combine_id);
+	hash      = hash_combine(hash, size);
+	if (types.count(hash) != 0) return types.at(hash);
+	Array_View_Type new_array_view_type;
+	new_array_view_type.unique_id = hash;
+	new_array_view_type.user_type_descriptor_idx = underlying;
+	new_array_view_type.length = size;
+	types[hash] = new_array_view_type;
+	return new_array_view_type;
+}
 
 Type AST_Interpreter::type_ident(
 	AST_Nodes nodes, size_t idx, std::string_view file
@@ -739,11 +729,19 @@ Type AST_Interpreter::type_ident(
 	auto& node = nodes[idx].Type_Identifier_;
 	if (node.pointer_to) {
 		auto underlying = type_interpret(nodes, *node.pointer_to, file);
+		return create_pointer_type(underlying.get_unique_id());
+	}
+	if (node.array_to) {
+		auto underlying = type_interpret(nodes, *node.array_to, file);
+		auto size       = interpret(nodes, *node.array_size, file);
+		if (!size.typecheck(Value::Real_Kind)) {
+			printlns("Support only constant time array.");
+			return nullptr;
+		}
 
-		auto hash = hash_combine(underlying.get_unique_id(), Pointer_Type::combine_id);
-		if (types.count(hash) != 0) return types.at(hash);
-		types[hash] = create_pointer_type(underlying.get_unique_id());
-		return types[hash];
+		return create_array_view_type(
+			underlying.get_unique_id(), (size_t)std::roundl(size.Real_.x)
+		);
 	}
 
 	return type_lookup(string_view_from_view(file, node.identifier.lexeme));
@@ -763,12 +761,12 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 
 	// >TODO(Tackwin): handle type info.
 	if (node.type_identifier) {
-		auto t = type_interpret(nodes, *node.type_identifier, file);
-
-		var = Identifier();
-		var.Identifier_.memory_idx = alloc(t.get_size());
-		memset(memory.data() + var.Identifier_.memory_idx, 0, t.get_size());
-		var.Identifier_.type_descriptor_id = t.get_unique_id();
+//		auto t = type_interpret(nodes, *node.type_identifier, file);
+//
+//		var = Identifier();
+//		var.Identifier_.memory_idx = alloc(t.get_size());
+//		memset(memory.data() + var.Identifier_.memory_idx, 0, t.get_size());
+//		var.Identifier_.type_descriptor_id = t.get_unique_id();
 	}
 
 
@@ -795,37 +793,12 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 				types[hash] = t.cast<User_Struct_Type>();
 			}
 		} else { // if we are dfining a value
-			if (x.typecheck(Value::Real_Kind)) {
-				var = Identifier();
-				var.Identifier_.memory_idx = alloc(sizeof(long double));
-				var.Identifier_.type_descriptor_id = Real_Type::unique_id;
 
-				copy(x, var.Identifier_.memory_idx);
-			}
-			if (x.typecheck(Value::Identifier_Kind)) {
-				auto id = x.cast<Identifier>();
-				var = Identifier();
-				var.Identifier_.memory_idx = alloc(types[id.type_descriptor_id].get_size());
-				var.Identifier_.type_descriptor_id = id.type_descriptor_id;
-
-				copy(x.cast<Identifier>(), var.Identifier_.memory_idx);
-			}
-			if (x.typecheck(Value::Pointer_Kind)) {
-				auto ptr = x.cast<Pointer>();
-				var = Identifier();
-				var.Identifier_.memory_idx = alloc(sizeof(size_t));
-
-				auto hash = hash_combine(x.Pointer_.type_descriptor_id, Pointer_Type::combine_id);
-				if (types.count(hash) == 0)
-					types[hash] = create_pointer_type(x.Pointer_.type_descriptor_id);
-				var.Identifier_.type_descriptor_id = hash;
-
-				write_ptr(ptr.memory_idx, var.Identifier_.memory_idx);
-			}
+			var = create_id(x);
 		}
 	}
 
-	return variables.back()[name];
+	return var;
 }
 
 Value AST_Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
@@ -874,6 +847,11 @@ void AST_Interpreter::print_value(const Value& value) noexcept {
 		return;
 	}
 
+	if (value.typecheck(Value::String_Kind)) {
+		println("%s", value.String_.x.c_str());
+		return;
+	}
+
 	//if (typecheck<std::string>(value)) {
 	//	auto x = std::any_cast<std::string>(value);
 	//	println("%s", x.c_str());
@@ -882,7 +860,7 @@ void AST_Interpreter::print_value(const Value& value) noexcept {
 
 	if (value.typecheck(Value::Identifier_Kind)) {
 		auto x = value.Identifier_;
-		if (x.type_descriptor_id != Void_Type::unique_id) print_value(at(x));
+		if (x.type_descriptor_id) print_value(at(x));
 		return;
 	}
 	printlns("RIP F in the chat for my boiii");
@@ -907,7 +885,7 @@ void AST_Interpreter::push_builtin() noexcept {
 			if (y.typecheck(Value::Identifier_Kind)) y = at(y.cast<Identifier>());
 			if (y.typecheck(Value::Pointer_Kind)) printf("%zu", y.cast<Pointer>().memory_idx);
 			else if (y.typecheck(Value::Real_Kind)) printf("%Lf", y.cast<Real>().x);
-			//else if (y.typecheck<std::string>()) printf("%s", std::any_cast<std::string>(y).c_str());
+			else if (y.typecheck(Value::String_Kind)) printf("%s", y.String_.x.c_str());
 			else printf("Unsupported type to print (%s)", y.name());
 
 			printf(" ");
@@ -937,13 +915,17 @@ void AST_Interpreter::push_builtin() noexcept {
 	};
 	builtins["sleep"] = sleep;
 
+
+	type_name_to_hash["nat"] = Nat_Type::unique_id;
 	type_name_to_hash["int"] = Int_Type::unique_id;
 	type_name_to_hash["void"] = Void_Type::unique_id;
+	type_name_to_hash["bool"] = Bool_Type::unique_id;
 	type_name_to_hash["real"] = Real_Type::unique_id;
-	types[Void_Type::unique_id] = Void_Type();
 	types[Real_Type::unique_id] = Real_Type();
+	types[Bool_Type::unique_id] = Bool_Type();
+	types[Void_Type::unique_id] = Void_Type();
+	types[Nat_Type::unique_id] = Nat_Type();
 	types[Int_Type::unique_id] = Int_Type();
-	types[Array_Type::unique_id] = Array_Type();
 
 	//Builtin len;
 	//len.f = [&] (std::vector<Identifier> values) -> Identifier {
@@ -970,22 +952,37 @@ void AST_Interpreter::push_builtin() noexcept {
 
 
 Type AST_Interpreter::type_lookup(std::string_view id) noexcept {
-	std::string huuuuugh(id.data(), id.size());
-	return types.at(type_name_to_hash.at(huuuuugh));
+	return types.at(type_name_to_hash.at(id));
 }
 
 size_t AST_Interpreter::copy(const Value& from, size_t to) noexcept {
+	if (from.typecheck(Value::Bool_Kind)) {
+		memory[to] = from.Bool_.x ? 1 : 0;
+	}
+	if (from.typecheck(Value::String_Kind)) {
+		auto str = memory.size();
+		auto len = from.String_.x.size();
+		for (auto c : from.String_.x) memory.push_back(c);
+		memcpy(memory.data() + to                 , &len, sizeof(size_t));
+		memcpy(memory.data() + to + sizeof(size_t), &str, sizeof(size_t));
+	}
+	if (from.typecheck(Value::Array_View_Kind)) {
+		auto ptr = from.Array_View_.memory_idx;
+		auto len = from.Array_View_.length;
+		memcpy(memory.data() + to                 , &len, sizeof(size_t));
+		memcpy(memory.data() + to + sizeof(size_t), &ptr, sizeof(size_t));
+	}
 	if (from.typecheck(Value::Real_Kind)) {
 		*reinterpret_cast<long double*>(memory.data() + to) = from.cast<Real>().x;
 		return sizeof(long double);
 	}
 	if (from.typecheck(Value::Pointer_Kind)) {
-		auto ptr = read_ptr(from.cast<Pointer>().memory_idx);
+		auto ptr = read_ptr(from.Pointer_.memory_idx);
 		memcpy(memory.data() + to, &ptr, sizeof(size_t));
 		return sizeof(size_t);
 	}
 	if (from.typecheck(Value::Identifier_Kind)) {
-		auto id = from.cast<Identifier>();
+		auto id = from.Identifier_;
 		if (types.at(id.type_descriptor_id).kind != Type::User_Struct_Type_Kind) {
 			return copy(at(id), to);
 		}
@@ -1031,15 +1028,65 @@ Value AST_Interpreter::at(Identifier id) noexcept {
 size_t AST_Interpreter::get_type_id(const Value& x) noexcept {
 	if (x.typecheck(Value::Real_Kind))        return Real_Type::unique_id;
 	if (x.typecheck(Value::Bool_Kind))        return Bool_Type::unique_id;
-	if (x.typecheck(Value::Identifier_Kind))  return x.cast<Identifier>().type_descriptor_id;
-	if (x.typecheck(Value::Pointer_Kind))     return x.cast<Pointer>().type_descriptor_id;
+	if (x.typecheck(Value::Pointer_Kind))     return x.Pointer_.type_descriptor_id;
+	if (x.typecheck(Value::Identifier_Kind))  return x.Identifier_.type_descriptor_id;
+	if (x.typecheck(Value::Array_View_Kind))  return x.Array_View_.type_descriptor_id;
 	return 0;
 }
-
+void AST_Interpreter::write_ptr(size_t ptr, size_t to) noexcept {
+	*reinterpret_cast<size_t*>(memory.data() + to) = ptr;
+}
 size_t AST_Interpreter::read_ptr(size_t ptr) noexcept {
 	return *reinterpret_cast<size_t*>(memory.data() + ptr);
 }
 
-void AST_Interpreter::write_ptr(size_t ptr, size_t to) noexcept {
-	*reinterpret_cast<size_t*>(memory.data() + to) = ptr;
+AST_Interpreter::Identifier AST_Interpreter::create_id(const Value& x) noexcept {
+	Identifier new_ident;
+	if (x.typecheck(Value::Real_Kind)) {
+		new_ident.type_descriptor_id = Real_Type::unique_id;
+		new_ident.memory_idx = alloc(sizeof(long double));
+	}
+	else if (x.typecheck(Value::Bool_Kind)) {
+		new_ident.type_descriptor_id = Bool_Type::unique_id;
+		new_ident.memory_idx = alloc(1);
+	}
+	else if (x.typecheck(Value::Pointer_Kind)) {
+		new_ident.type_descriptor_id =
+			create_pointer_type(x.Pointer_.type_descriptor_id).get_unique_id();
+		new_ident.memory_idx = alloc(sizeof(size_t));
+	}
+	else if (x.typecheck(Value::Identifier_Kind)) {
+		new_ident.type_descriptor_id = x.Identifier_.type_descriptor_id;
+		new_ident.memory_idx = alloc(types.at(new_ident.type_descriptor_id).get_size());
+	}
+	else if (x.typecheck(Value::String_Kind)) {
+		new_ident.type_descriptor_id =
+			create_array_view_type(Byte_Type::unique_id, x.String_.x.size()).get_unique_id();
+		new_ident.memory_idx = alloc(sizeof(size_t) + sizeof(size_t));
+	}
+	else if (x.typecheck(Value::Array_View_Kind)) {
+		new_ident.type_descriptor_id =
+			create_array_view_type(
+				x.Array_View_.type_descriptor_id, x.Array_View_.length
+			).get_unique_id();
+		new_ident.memory_idx = alloc(sizeof(size_t) + sizeof(size_t));
+	}
+	else {
+		assert("Sadge.");
+	}
+	copy(x, new_ident.memory_idx);
+	return new_ident;
+}
+
+Type AST_Interpreter::type_of(const Value& x) noexcept {
+	     if (x.typecheck(Value::Bool_Kind)) return Bool_Type();
+	else if (x.typecheck(Value::Real_Kind)) return Real_Type();
+	else if (x.typecheck(Value::Identifier_Kind))
+		return types.at(x.Identifier_.type_descriptor_id);
+	else if (x.typecheck(Value::Pointer_Kind))
+		return create_pointer_type(x.Pointer_.type_descriptor_id);
+	else if (x.typecheck(Value::Array_View_Kind))
+		return create_array_view_type(x.Array_View_.type_descriptor_id, x.Array_View_.length);
+	else  assert("sadge");
+	return nullptr;
 }
