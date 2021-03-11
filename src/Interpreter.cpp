@@ -437,7 +437,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 					}
 					case Type::User_Struct_Type_Kind: {
 						auto& next_node = nodes[next].Identifier_;
-						auto name = string_from_view(file, next_node.token.lexeme);
+						auto name = string_view_from_view(file, next_node.token.lexeme);
 
 						size_t idx = type.User_Struct_Type_.name_to_idx.at(name);
 						Identifier id;
@@ -552,7 +552,7 @@ Type AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view f
 	size_t running_offset = 0;
 	for (size_t idx = node.struct_line_idx; idx; idx = nodes[idx]->next_statement) {
 		auto& def = nodes[idx].Assignement_;
-		auto name = string_from_view(file, def.identifier.lexeme);
+		auto name = string_view_from_view(file, def.identifier.lexeme);
 
 		desc.name_to_idx[name] = desc.member_types.size();
 		desc.member_offsets.push_back(running_offset);
@@ -578,7 +578,7 @@ Type AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view f
 			}
 		}
 
-		desc.unique_id = hash_combine(desc.unique_id, std::hash<std::string>()(name));
+		desc.unique_id = hash_combine(desc.unique_id, Hasher()(name));
 		desc.unique_id = hash_combine(desc.unique_id, desc.member_types.back());
 	}
 	desc.byte_size = running_offset;
@@ -752,10 +752,10 @@ Type AST_Interpreter::type_ident(
 
 Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Assignement_;
-	auto name = string_from_view(file, node.identifier.lexeme);
+	auto name = string_view_from_view(file, node.identifier.lexeme);
 
 	if (variables.back().count(name) > 0) {
-		println("Error variable %s already assigned.", name.c_str());
+		println("Error variable %*.s already assigned.", (int)name.size(), name.data());
 		return nullptr;
 	}
 
