@@ -52,8 +52,8 @@ Value AST_Interpreter::interpret(
 		printlns("Reached end of non void returning function.");
 		return nullptr;
 	}
-	if (!v.typecheck(Value::Return_Call_Kind)) return Void_Type();
-	auto r = std::any_cast<Return_Call>(v);
+	if (!v.typecheck(Value::Return_Call_Kind)) return nullptr;
+	auto& r = v.Return_Call_;
 	if (r.values.size() != f.return_type.size()) {
 		println(
 			"Trying to return from a function with wrong number of return parameters, "
@@ -131,7 +131,7 @@ Value AST_Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fi
 				println("Type error, expected long double got %s", x.name());
 				return nullptr;
 			}
-			return -x.cast<Real>().x;
+			return Real{ -x.cast<Real>().x };
 		}
 		case AST::Operator::Plus: {
 			auto x = interpret(nodes, node.right_idx, file);
@@ -140,7 +140,7 @@ Value AST_Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fi
 				println("Type error, expected long double got %s", x.name());
 				return nullptr;
 			}
-			return +x.cast<Real>().x;
+			return Real{ +x.cast<Real>().x };
 		}
 		case AST::Operator::Inc: {
 			auto x = interpret(nodes, node.right_idx, file);
@@ -211,7 +211,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x > right.cast<Real>().x;
+			return Bool{ left.cast<Real>().x > right.cast<Real>().x };
 		}
 		case AST::Operator::Eq: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -229,7 +229,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x == right.cast<Real>().x;
+			return Bool{ left.cast<Real>().x == right.cast<Real>().x };
 		}
 		case AST::Operator::Neq: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -247,7 +247,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x != right.cast<Real>().x;
+			return Bool{ left.cast<Real>().x != right.cast<Real>().x };
 		}
 		case AST::Operator::Lt: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -265,7 +265,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x < right.cast<Real>().x;
+			return Bool{ left.cast<Real>().x < right.cast<Real>().x };
 		}
 		case AST::Operator::Assign: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -317,7 +317,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x <= right.cast<Real>().x;
+			return Bool{ left.cast<Real>().x <= right.cast<Real>().x };
 		}
 		case AST::Operator::Plus: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -335,7 +335,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x + right.cast<Real>().x;
+			return Real{ left.cast<Real>().x + right.cast<Real>().x };
 		}
 		case AST::Operator::Star: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -353,7 +353,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x * right.cast<Real>().x;
+			return Real{ left.cast<Real>().x * right.cast<Real>().x };
 		}
 		case AST::Operator::Div: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -371,7 +371,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x / right.cast<Real>().x;
+			return Real{ left.cast<Real>().x / right.cast<Real>().x };
 		}
 		case AST::Operator::Mod: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -389,7 +389,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return std::fmodl(left.cast<Real>().x, right.cast<Real>().x);
+			return Real{ std::fmodl(left.cast<Real>().x, right.cast<Real>().x) };
 		}
 		case AST::Operator::Minus: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -407,7 +407,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			return left.cast<Real>().x - right.cast<Real>().x;
+			return Real{ left.cast<Real>().x - right.cast<Real>().x };
 		}
 		case AST::Operator::Dot: {
 			auto root_struct = interpret(nodes, node.left_idx, file);
@@ -617,7 +617,9 @@ Type AST_Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view fil
 
 Value AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	auto& node = nodes[idx].Function_Call_;
-	std::vector<Identifier> arguments;
+	thread_local std::vector<Identifier> arguments;
+	arguments.clear();
+
 	for (size_t idx = node.argument_list_idx, i = 0; idx; idx = nodes[idx]->next_statement, i++) {
 		auto& param = nodes[idx].Argument_;
 		auto x = interpret(nodes, param.value_idx, file);

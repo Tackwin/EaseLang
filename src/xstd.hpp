@@ -58,9 +58,13 @@ static double seconds() noexcept {
 #define CONCAT(x, y) CONCAT_(x, y)
 #define defer details::Defer CONCAT(defer_, __COUNTER__) = [&]
 
+template<bool flag = false> void static_no_match() noexcept {
+	static_assert(flag, "No match.");
+}
+
 #define sum_type_X_Kind(x) , x##_Kind
 #define sum_type_X_Union(x) x x##_;
-#define sum_type_X_cst(x) if constexpr (std::is_same_v<T, x>) {\
+#define sum_type_X_cst(x) else if constexpr (std::is_same_v<T, x>) {\
 	kind = x##_Kind; new (&x##_) x; x##_ = (y);\
 }
 #define sum_type_X_case_cpy(x) case x##_Kind: new(&x##_) x; x##_ = that.x##_; break;
@@ -68,12 +72,17 @@ static double seconds() noexcept {
 #define sum_type_X_dst(x) case x##_Kind: x##_ .x::~x (); break;
 #define sum_type_X_name(x) case x##_Kind: return #x;
 #define sum_type_X_cast(x) if constexpr (std::is_same_v<T, x>) { return x##_; }
+#define sum_type_X_one_of(x) std::is_same_v<T, x> ||
 
 #define sum_type(n, list)\
 		enum Kind { None_Kind = 0 list(sum_type_X_Kind) } kind;\
 		union { list(sum_type_X_Union) };\
 		n() noexcept { kind = None_Kind; }\
-		template<typename T> n(const T& y) noexcept { list(sum_type_X_cst) }\
+		template<typename T> n(const T& y) noexcept {\
+			if constexpr (false);\
+			list(sum_type_X_cst)\
+			else static_no_match<list(sum_type_X_one_of) false>();\
+		}\
 		~n() {\
 			switch(kind) {\
 				list(sum_type_X_dst)\
