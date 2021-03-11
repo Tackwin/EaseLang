@@ -96,6 +96,7 @@ struct Parser_State {
 			case Token::Type::Minus: return true;
 			case Token::Type::Plus:  return true;
 			case Token::Type::Not:   return true;
+			case Token::Type::Star:  return true;
 			case Token::Type::Amp:   return true;
 			default: return false;
 		}
@@ -439,12 +440,18 @@ struct Parser_State {
 		if (type_is(Token::Type::Identifier)) {
 			x.type_identifier = type_identifier();
 			if (!x.type_identifier) return 0;
-		} else if (!type_is(Token::Type::Equal)) return 0;
-		i++;
+		}
+		// If there is no identifier AND no equal (meaning value) then we just have something like
+		// x:; which we don't allow.
+		else if (!type_is(Token::Type::Equal)) return 0;
 
-		auto literral_idx = expression();
-		if (!literral_idx) return 0;
-		x.value_idx = literral_idx;
+		if (type_is(Token::Type::Equal)) {
+			i++;
+			auto literral_idx = expression();
+			if (!literral_idx) return 0;
+			x.value_idx = literral_idx;
+		}
+
 
 		ast_return;
 	};

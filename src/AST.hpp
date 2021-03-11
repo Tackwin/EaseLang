@@ -33,7 +33,7 @@ struct AST {
 	struct Assignement : Statement {
 		Token identifier;
 		std::optional<size_t> type_identifier = std::nullopt;
-		size_t value_idx = 0;
+		std::optional<size_t> value_idx = std::nullopt;
 
 		// Gather all the keyword lol
 		virtual std::string string(
@@ -44,7 +44,9 @@ struct AST {
 			if (type_identifier) {
 				res += " " + expressions.nodes[*type_identifier]->string(file, expressions) + " ";
 			}
-			res += "= " + expressions.nodes[value_idx]->string(file, expressions);
+			if (value_idx) {
+				res += "= " + expressions.nodes[*value_idx]->string(file, expressions);
+			}
 			return res;
 		}
 	};

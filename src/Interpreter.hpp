@@ -27,6 +27,9 @@ struct AST_Interpreter {
 	struct Bool {
 		bool x = false;
 	};
+	struct String {
+		std::string x;
+	};
 	struct Return_Call {
 		std::vector<Identifier> values;
 	};
@@ -34,7 +37,9 @@ struct AST_Interpreter {
 		std::function<Identifier(std::vector<Identifier>)> f;
 	};
 
-	#define LIST_LANG_VALUE(X) X(Identifier) X(Pointer) X(Real) X(Return_Call) X(Bool) X(Builtin)
+	#define LIST_LANG_VALUE(X)\
+	X(Identifier) X(Pointer) X(Real) X(Return_Call) X(Bool) X(Builtin) X(String)
+
 	struct Value { sum_type(Value, LIST_LANG_VALUE); };
 
 
@@ -43,7 +48,8 @@ struct AST_Interpreter {
 	struct Int_Type    { static constexpr size_t unique_id = 2; };
 	struct Bool_Type   { static constexpr size_t unique_id = 3; };
 	struct Pointer_Type {
-		static constexpr size_t unique_id = 4;
+		static constexpr size_t combine_id = 0;
+		size_t unique_id = 0;
 		size_t user_type_descriptor_idx = 0;
 	};
 	struct Array_Type {
@@ -93,8 +99,8 @@ struct AST_Interpreter {
 			case Void_Type_Kind: return Void_Type::unique_id;
 			case Real_Type_Kind: return Real_Type::unique_id;
 			case Int_Type_Kind:  return Int_Type::unique_id;
-			case Pointer_Type_Kind : return Pointer_Type::unique_id;
 			case Array_Type_Kind   : return Array_Type::unique_id;
+			case Pointer_Type_Kind : return Pointer_Type_.unique_id;
 			case User_Struct_Type_Kind:  return User_Struct_Type_.unique_id;
 			default: return 0;
 			}
@@ -139,6 +145,7 @@ struct AST_Interpreter {
 		AST_Nodes nodes, const User_Function_Type& f, std::string_view file
 	) noexcept;
 
+	Type  create_pointer_type(size_t underlying) noexcept;
 	Type  type_lookup(std::string_view id) noexcept;
 	Value      lookup(std::string_view id) noexcept;
 

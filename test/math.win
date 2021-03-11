@@ -11,6 +11,10 @@ rect2 := struct {
 main := proc () {
 	r     := rect2{vect2{1, 2}, vect2{3, 4}};
 	r_ptr := &r;
+	r_ptr.pos.x = 5;
+	r_ptr2 : rect2*;
+	r_ptr2 = r_ptr;
+	r_ptr2.pos.y = 6;
 	print(r.pos.x, r.pos.y, r.size.x, r.size.y);
 	print(r_ptr.pos.x, r_ptr.pos.y, r_ptr.size.x, r_ptr.size.y);
 };
