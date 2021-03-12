@@ -68,7 +68,8 @@ struct AST_Interpreter {
 		size_t length = 0;
 	};
 	struct User_Function_Type {
-		size_t unique_id = 0;
+		static constexpr size_t return_separator_id = 0;
+		size_t unique_id = 0;;
 		size_t start_idx = 0;
 		std::vector<size_t>           parameter_type;
 		std::vector<std::string_view> parameter_name;
@@ -126,7 +127,6 @@ struct AST_Interpreter {
 	std::vector<std::uint8_t> memory;
 	std::unordered_map<std::string_view, size_t, Hasher> type_name_to_hash;
 	std::unordered_map<size_t, Type> types;
-	size_t Type_N = 5;
 
 	// Ordered from out most scope to in most scope.
 	std::vector<std::unordered_map<std::string_view, Value, Hasher>> variables;
