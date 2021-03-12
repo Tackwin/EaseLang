@@ -198,7 +198,16 @@ Value AST_Interpreter::unary_op(AST_Nodes nodes, size_t idx, std::string_view fi
 			id.type_descriptor_id = x.cast<Pointer>().type_descriptor_id;
 			return id;
 		}
-		case AST::Operator::Not:
+		case AST::Operator::Not: {
+			auto x = interpret(nodes, node.right_idx, file);
+			if (x.typecheck(Value::Identifier_Kind)) x = at(x.cast<Identifier>());
+			if (!x.typecheck(Value::Bool_Kind)) {
+				println("Type error, expected Bool got %s", x.name());
+				return nullptr;
+			}
+
+			return Bool{ !x.Bool_.x };
+		}
 		default: return nullptr;
 	}
 }
@@ -286,31 +295,8 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				println("Error expected Identifier for the lhs, got %s", left.name());
 				return nullptr;
 			}
-			if (right.typecheck(Value::Identifier_Kind)) {
-				if (
-					left .cast<Identifier>().type_descriptor_id !=
-					right.cast<Identifier>().type_descriptor_id
-				) {
-					printlns("Mismatch between left and right type.");
-					return nullptr;
-				}
-
-				copy(right.cast<Identifier>(), left.cast<Identifier>().memory_idx);
-			} else if (right.typecheck(Value::Real_Kind)) {
-				if (left.cast<Identifier>().type_descriptor_id != Real_Type::unique_id) {
-					println(
-						"Mismatch between left and right type %zu, %zu.",
-						left.cast<Identifier>().type_descriptor_id,
-						Real_Type::unique_id
-					);
-					return nullptr;
-				}
-
-				auto x = right.cast<Real>().x;
-				memcpy(memory.data() + left.cast<Identifier>().memory_idx, &x, sizeof(long double));
-			}
-
-			return right;
+			copy(right, left.Identifier_.memory_idx);
+			return left;
 		}
 		case AST::Operator::Leq: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -331,22 +317,27 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 			return Bool{ left.cast<Real>().x <= right.cast<Real>().x };
 		}
 		case AST::Operator::Plus: {
+			Real sum{ 0 };
 			auto left  = interpret(nodes, node.left_idx, file);
-			auto right = interpret(nodes, node.rest_idx, file);
-
-			if (left .typecheck(Value::Identifier_Kind)) left  = at(left .cast<Identifier>());
-			if (right.typecheck(Value::Identifier_Kind)) right = at(right.cast<Identifier>());
-			
+			if (left.typecheck(Value::Identifier_Kind)) left  = at(left.cast<Identifier>());
 			if (!left.typecheck(Value::Real_Kind)) {
 				println("Error expected long double for the lhs, got %s", left.name());
 				return nullptr;
 			}
-			if (!right.typecheck(Value::Real_Kind)) {
-				println("Error expected long double for the rhs, got %s", right.name());
-				return nullptr;
+
+			sum.x = left.Real_.x;
+			for (size_t i = node.rest_idx; i; i = nodes[i]->next_statement) {
+				auto right = interpret(nodes, i, file);
+				if (right.typecheck(Value::Identifier_Kind)) right = at(right.cast<Identifier>());
+				if (!right.typecheck(Value::Real_Kind)) {
+					println("Error expected long double for the rhs, got %s", right.name());
+					return nullptr;
+				}
+
+				sum.x += right.Real_.x;
 			}
 
-			return Real{ left.cast<Real>().x + right.cast<Real>().x };
+			return sum;
 		}
 		case AST::Operator::Star: {
 			auto left  = interpret(nodes, node.left_idx, file);
@@ -664,6 +655,11 @@ Value AST_Interpreter::array_access(AST_Nodes nodes, size_t idx, std::string_vie
 		println("Error expected Identifier got %s.", id.name());
 		return nullptr;
 	}
+	auto type = types.at(id.Identifier_.type_descriptor_id);
+	if (!type.typecheck(Type::Array_View_Type_Kind)) {
+		println("Error expected Array got %s.", type.name());
+		return nullptr;
+	}
 
 	auto access_id = interpret(nodes, node.identifier_acess_idx, file);
 	if (access_id.typecheck(Value::Identifier_Kind)) access_id = at(access_id.cast<Identifier>());
@@ -673,11 +669,11 @@ Value AST_Interpreter::array_access(AST_Nodes nodes, size_t idx, std::string_vie
 	}
 
 	size_t i = (size_t)std::roundl(access_id.cast<Real>().x);
-	size_t size = types.at(id.cast<Identifier>().type_descriptor_id).get_size();
+	size_t size = types.at(type.Array_View_Type_.user_type_descriptor_idx).get_size();
 
 	Identifier identifier;
-	identifier.memory_idx = id.cast<Identifier>().memory_idx + i * size;
-	identifier.type_descriptor_id = id.cast<Identifier>().type_descriptor_id;
+	identifier.memory_idx = read_ptr(id.Identifier_.memory_idx + sizeof(size_t)) + i * size;
+	identifier.type_descriptor_id = type.Array_View_Type_.user_type_descriptor_idx;
 
 	return identifier;
 }
@@ -759,17 +755,13 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 	}
 
 	auto& var = variables.back()[name];
+	size_t type_hint = 0;
 
 	// >TODO(Tackwin): handle type info.
 	if (node.type_identifier) {
-//		auto t = type_interpret(nodes, *node.type_identifier, file);
-//
-//		var = Identifier();
-//		var.Identifier_.memory_idx = alloc(t.get_size());
-//		memset(memory.data() + var.Identifier_.memory_idx, 0, t.get_size());
-//		var.Identifier_.type_descriptor_id = t.get_unique_id();
+		auto t = type_interpret(nodes, *node.type_identifier, file);
+		type_hint = t.get_unique_id();
 	}
-
 
 	if (node.value_idx) {
 		auto x = interpret(nodes, *node.value_idx, file);
@@ -795,7 +787,44 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 			}
 		} else { // if we are dfining a value
 
-			var = create_id(x);
+			if (node.type_identifier) {
+				auto type = types.at(type_hint);
+
+				// special case for things like `x : int[10] = 5;`
+				if (type.typecheck(Type::Array_View_Type_Kind)) {
+					auto value_type = types.at(get_type_id(x));
+					auto& underlying = types.at(type.Array_View_Type_.user_type_descriptor_idx);
+					if (underlying.get_unique_id() != value_type.get_unique_id()) {
+						println(
+							"Mismatch type in assignement (L %zu) %s != %s.",
+							node.identifier.line,
+							type.name(),
+							value_type.name()
+						);
+						return nullptr;
+					}
+
+					Array_View v;
+					v.memory_idx = alloc(type.Array_View_Type_.length * underlying.get_size());
+					v.length = type.Array_View_Type_.length;
+					v.type_descriptor_id = type.Array_View_Type_.user_type_descriptor_idx;
+					for (size_t i = 0; i < v.length; ++i)
+						copy(x, v.memory_idx + i * underlying.get_size());
+					var = create_id(v);
+				} else {
+					if (type.get_unique_id() != get_type_id(x)) {
+						println(
+							"Mismatch type in assignement (L %zu) %s != %s.",
+							node.identifier.line,
+							type.name(),
+							types.at(get_type_id(x)).name()
+						);
+						return nullptr;
+					}
+				}
+			} else {
+				var = create_id(x);
+			}
 		}
 	}
 
@@ -825,7 +854,10 @@ Value AST_Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view fi
 	if (node.token.type == Token::Type::String) {
 		return String{ std::string(file.data() + view.i + 1, view.size - 2) };
 	}
-	
+
+	if (node.token.type == Token::Type::False) return Bool{ false };
+	if (node.token.type == Token::Type::True ) return Bool{ true  };
+
 	return nullptr;
 }
 
@@ -887,6 +919,7 @@ void AST_Interpreter::push_builtin() noexcept {
 			if (y.typecheck(Value::Pointer_Kind)) printf("%zu", y.cast<Pointer>().memory_idx);
 			else if (y.typecheck(Value::Real_Kind)) printf("%Lf", y.cast<Real>().x);
 			else if (y.typecheck(Value::String_Kind)) printf("%s", y.String_.x.c_str());
+			else if (y.typecheck(Value::Bool_Kind)) printf("%s", y.Bool_.x ? "true" : "false");
 			else if (y.typecheck(Value::Array_View_Kind)) {
 				auto underlying = types.at(y.Array_View_.type_descriptor_id);
 				if (underlying.typecheck(Type::Byte_Type_Kind)) {
@@ -943,27 +976,25 @@ void AST_Interpreter::push_builtin() noexcept {
 	types[Nat_Type::unique_id] = Nat_Type();
 	types[Int_Type::unique_id] = Int_Type();
 
-	//Builtin len;
-	//len.f = [&] (std::vector<Identifier> values) -> Identifier {
-	//	if (values.size() != 1) {
-	//		println("len expect 1 Array argument, got %zu arguments.", values.size());
-	//		return {};
-	//	}
-//
-	//	auto x = at(values.front());
-	//	if (x.typecheck(Value::Identifier_Kind)) x = at(x.cast<Identifier>());
-	//	if (!typecheck<Array>(x)) {
-	//		println("Len expect a array argument, got %s.", x.type().name());
-	//		return 0;
-	//	}
-//
-	//	Identifier y;
-	//	y.memory_idx = alloc(sizeof(long double));
-	//	y.type_descriptor_id = Real_Type::unique_id;
-//
-	//	//return alloc(cast<Array>(x).values.size());
-	//};
-	//builtins["len"] = len;
+	Builtin len;
+	len.f = [&] (std::vector<Identifier> values) -> Identifier {
+		if (values.size() != 1) {
+			println("len expect 1 Array argument, got %zu arguments.", values.size());
+			return {};
+		}
+
+		auto x = at(values.front());
+		if (x.typecheck(Value::Identifier_Kind)) x = at(x.cast<Identifier>());
+		if (!x.typecheck(Value::Array_View_Kind)) {
+			println("Len expect a array argument, got %s.", x.name());
+			return {};
+		}
+
+		Real r;
+		r.x = x.Array_View_.length;
+		return create_id(r);
+	};
+	builtins["len"] = len;
 }
 
 

@@ -390,12 +390,26 @@ struct Parser_State {
 		ast_return;
 	};
 
+	size_t bool_litteral() noexcept {
+		AST::Litteral x;
+		x.scope = current_scope;
+		x.depth = current_depth++;
+		defer{ current_depth--; };
+
+		if (!type_is(Token::Type::True) && !type_is(Token::Type::False)) return 0;
+		x.token = tokens[i++];
+
+		ast_return;
+	}
+
 	size_t litteral() noexcept {
 
 		if (type_is(Token::Type::Proc))       return function_definition();
 		if (type_is(Token::Type::Struct))     return struct_definition();
 		if (type_is(Token::Type::String))     return string_litteral();
 		if (type_is(Token::Type::Number))     return number_litteral();
+		if (type_is(Token::Type::True))       return bool_litteral();
+		if (type_is(Token::Type::False))      return bool_litteral();
 
 		return 0;
 	};

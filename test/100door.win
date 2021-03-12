@@ -1,6 +1,5 @@
 main := proc {
-	n_door := 100;
-	doors : bool[n_door] = 0;
+	doors : bool[100] = false;
 
 	for (i := 0; i < len(doors); i++;) {
 		for (n := i; n < len(doors); n = n + i + 1;) {

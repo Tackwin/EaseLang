@@ -141,6 +141,14 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 			new_token.type = Token::Type::Const;
 			i += 5;
 		}
+		else if (string_comp(i, "true", str)) {
+			new_token.type = Token::Type::True;
+			i += 4;
+		}
+		else if (string_comp(i, "false", str)) {
+			new_token.type = Token::Type::False;
+			i += 5;
+		}
 		else if (isdigit(str[i])) {
 			new_token.type = Token::Type::Number;
 			for (; i < str.size() && isdigit(str[i]) || str[i] == '.'; i++);
@@ -179,6 +187,8 @@ std::string token_type_to_string(Token::Type type) noexcept {
 		case Token::Type::Leq: return "Leq";
 		case Token::Type::Lt: return "Lt";
 		case Token::Type::Eq: return "Eq";
+		case Token::Type::False: return "False";
+		case Token::Type::True: return "True";
 		case Token::Type::Neq: return "Neq";
 		case Token::Type::And: return "And";
 		case Token::Type::Or: return "Or";

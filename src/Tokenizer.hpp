@@ -47,6 +47,8 @@ struct Token {
 		Struct,
 		If,
 		Else,
+		True,
+		False,
 
 		Equal,
 		Number,
