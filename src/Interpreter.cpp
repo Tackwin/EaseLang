@@ -108,16 +108,23 @@ Value AST_Interpreter::init_list(AST_Nodes nodes, size_t idx, std::string_view f
 			case Type::User_Struct_Type_Kind: {
 				auto& user_struct = type.User_Struct_Type_;
 
-				size_t off = new_identifier.memory_idx;
+				size_t i = 0;
 				for (
-					size_t idx = node.expression_list_idx, i = 0;
+					size_t idx = node.expression_list_idx;
 					idx;
 					idx = nodes[idx]->next_statement, i++
-				) {
-					auto v = interpret(nodes, idx, file);
-					copy(v, off);
-					off += types[user_struct.member_types[i]].get_size();
-				}
+				)
+					copy(
+						interpret(nodes, idx, file),
+						new_identifier.memory_idx + user_struct.member_offsets[i]
+					);
+
+				for (; i < user_struct.member_offsets.size(); ++i)
+					copy(
+						user_struct.default_values[i],
+						new_identifier.memory_idx + user_struct.member_offsets[i]
+					);
+
 				break;
 			}
 			default:
@@ -554,34 +561,19 @@ Type AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view f
 	size_t running_offset = 0;
 	for (size_t idx = node.struct_line_idx; idx; idx = nodes[idx]->next_statement) {
 		auto& def = nodes[idx].Assignement_;
+
 		auto name = string_view_from_view(file, def.identifier.lexeme);
+		auto member = assignement(nodes, idx, file);
 
 		desc.name_to_idx[name] = desc.member_types.size();
+		desc.member_types  .push_back(member.Identifier_.type_descriptor_id);
 		desc.member_offsets.push_back(running_offset);
-
-		// if we have type information.
-		if (def.type_identifier) {
-			desc.member_types.push_back(
-				type_interpret(nodes, *def.type_identifier, file).get_unique_id()
-			);
-			running_offset += types.at(desc.member_types.back()).get_size();
-		}
-
-		desc.default_values.push_back(nullptr);
-		// if we have default value
-		if (def.value_idx) {
-			auto value = interpret(nodes, *def.value_idx, file);
-
-			desc.default_values.back() = interpret(nodes, *def.value_idx, file);
-			// if we _only_ have default value
-			if (!def.type_identifier) {
-				desc.member_types.push_back(get_type_id(value));
-				running_offset += types.at(desc.member_types.back()).get_size();
-			}
-		}
+		desc.default_values.push_back(member);
 
 		desc.unique_id = hash_combine(desc.unique_id, Hasher()(name));
 		desc.unique_id = hash_combine(desc.unique_id, desc.member_types.back());
+
+		running_offset += types.at(desc.member_types.back()).get_size();
 	}
 	desc.byte_size = running_offset;
 
@@ -602,16 +594,15 @@ Type AST_Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view fil
 		auto type = type_ident(nodes, param.type_identifier, file);
 		f.parameter_type.push_back(type.get_unique_id());
 		f.parameter_name.push_back(string_view_from_view(file, param.name.lexeme));
-		f.unique_id = hash_combine(f.unique_id, type.get_unique_id());
 	}
-	f.unique_id = hash_combine(f.unique_id, User_Function_Type::return_separator_id);
 
 	for (size_t idx = node.return_list_idx; idx; idx = nodes[idx]->next_statement) {
 		auto& ret = nodes[idx].Return_Parameter_;
 		auto type = type_ident(nodes, ret.type_identifier, file);
 		f.return_type.push_back(type.get_unique_id());
-		f.unique_id = hash_combine(f.unique_id, type.get_unique_id());
 	}
+
+	f.unique_id = hash_combine(0, idx);
 
 	types[f.unique_id] = f;
 
@@ -866,10 +857,7 @@ Value AST_Interpreter::expression(AST_Nodes nodes, size_t idx, std::string_view 
 }
 
 void AST_Interpreter::print_value(const Value& value) noexcept {
-	if (value.typecheck(Value::None_Kind)) {
-		printlns("None.");
-		return;
-	}
+	if (value.typecheck(Value::None_Kind)) return;
 	if (value.typecheck(Value::Real_Kind)) {
 		println("%Lf", value.Real_.x);
 		return;
@@ -894,6 +882,11 @@ void AST_Interpreter::print_value(const Value& value) noexcept {
 	if (value.typecheck(Value::Identifier_Kind)) {
 		auto x = value.Identifier_;
 		if (x.type_descriptor_id) print_value(at(x));
+		return;
+	}
+
+	if (value.typecheck(Value::Pointer_Kind)) {
+		println("[%zu]", value.Pointer_.memory_idx);
 		return;
 	}
 	printlns("RIP F in the chat for my boiii");
@@ -1071,6 +1064,12 @@ Value AST_Interpreter::at(Identifier id) noexcept {
 			Pointer x;
 			x.memory_idx = id.memory_idx;
 			x.type_descriptor_id = type.Pointer_Type_.user_type_descriptor_idx;
+			return x;
+		}
+		case Type::User_Function_Type_Kind: {
+			Pointer x;
+			x.memory_idx = read_ptr(id.memory_idx);
+			x.type_descriptor_id = id.type_descriptor_id;
 			return x;
 		}
 		default: break;

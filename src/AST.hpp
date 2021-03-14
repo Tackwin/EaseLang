@@ -68,29 +68,33 @@ struct AST {
 		Amp,
 		Inc,
 		Star,
+		Deref,
 		Dot,
+		Function_Call,
+		Array_Call,
 		Or
 	};
 	static const char* op_to_string(Operator x) noexcept {
 		switch (x) {
-		case Operator::Minus:  return "-";
-		case Operator::Plus:   return "+";
-		case Operator::Geq:    return ">=";
-		case Operator::Leq:    return "<=";
-		case Operator::Gt:     return ">";
-		case Operator::Lt:     return "<";
-		case Operator::Mod:    return "%";
-		case Operator::Eq:     return "==";
-		case Operator::Neq:    return "!=";
-		case Operator::And:    return "&&";
-		case Operator::Or:     return "||";
-		case Operator::Not:    return "!";
-		case Operator::Inc:    return "++";
-		case Operator::Div:    return "/";
-		case Operator::Dot:    return ".";
-		case Operator::Amp:    return "&";
-		case Operator::Star:   return "*";
-		case Operator::Assign: return "=";
+		case Operator::Minus:    return "-";
+		case Operator::Plus:     return "+";
+		case Operator::Geq:      return ">=";
+		case Operator::Leq:      return "<=";
+		case Operator::Gt:       return ">";
+		case Operator::Lt:       return "<";
+		case Operator::Mod:      return "%";
+		case Operator::Eq:       return "==";
+		case Operator::Neq:      return "!=";
+		case Operator::And:      return "&&";
+		case Operator::Or:       return "||";
+		case Operator::Not:      return "!";
+		case Operator::Inc:      return "++";
+		case Operator::Div:      return "/";
+		case Operator::Dot:      return ".";
+		case Operator::Amp:      return "&";
+		case Operator::Star:     return "*";
+		case Operator::Deref:    return "*";
+		case Operator::Assign:   return "=";
 		default: return "??";
 		}
 	}

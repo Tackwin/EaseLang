@@ -1,0 +1,21 @@
+s := struct {
+	x := 0;
+	y := 0;
+	arr : bool[10] = false;
+	f := proc {
+		print("Notice me");
+	};
+	f2 := proc {
+		print("Senpai");
+	};
+};
+
+main := proc {
+	x := s{ 1 };
+	x.f();
+	x.f2();
+	print(x.x, x.y);
+	print(x.arr[4]);
+};
+
+main();

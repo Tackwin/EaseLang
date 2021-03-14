@@ -27,19 +27,21 @@ int main(int argc, char** argv) noexcept {
 
 	auto tokens = tokenize(file);
 
-	size_t i = 0;
-	for (auto& x : tokens) {
-		printf("%zu, %s ", i++, token_type_to_string(x.type).c_str());
-		printf("[%zu; %zu] %.*s\n", x.line, x.col, (int)x.lexeme.size, &file[x.lexeme.i]);
-	}
+	if (false) {
+		size_t i = 0;
+		for (auto& x : tokens) {
+			printf("%zu, %s ", i++, token_type_to_string(x.type).c_str());
+			printf("[%zu; %zu] %.*s\n", x.line, x.col, (int)x.lexeme.size, &file[x.lexeme.i]);
+		}
 
+
+
+	}
 	auto exprs = parse(tokens, file);
 	printf("Parsed\n\n");
-
 	for (auto& x : exprs.nodes) if (x.kind && x->depth == 0)
 		printf("%s;\n", x->string(file, exprs).c_str());
-
-	printf("Prettyied\n\n");
+	printf("\nPrettyied\n\n");
 
 	AST_Interpreter ast_interpreter;
 	ast_interpreter.push_builtin();

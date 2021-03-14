@@ -482,10 +482,9 @@ struct Parser_State {
 		if (it + 1 == ops.size()) x.left_idx = factor();
 		else                      x.left_idx = expression_helper(ops, it + 1);
 
-
 		if (!type_is(ops[it])) return x.left_idx;
 		else                       x.op = cast_to_op(tokens[i].type);
-		
+
 		size_t idx = 0;
 		while ( type_is(ops[it]) && i++) {
 			size_t t;
@@ -506,8 +505,7 @@ struct Parser_State {
 			TT::Or, TT::And,
 			TT::Eq, TT::Neq,
 			TT::Gt, TT::Geq, TT::Lt, TT::Leq,
-			TT::Mod, TT::Plus, TT::Minus, TT::Star, TT::Div,
-			TT::Dot
+			TT::Mod, TT::Plus, TT::Minus, TT::Star, TT::Div
 		};
 
 		return expression_helper(least_to_most_precedent, 0);
@@ -561,7 +559,27 @@ struct Parser_State {
 
 	size_t prefix_operator() noexcept {
 		if (is_prefix_unary_op(tokens[i].type)) return unary_operation();
-		return atom();
+
+		AST::Operation_List dot_list;
+		dot_list.scope = current_scope;
+		dot_list.depth = current_depth;
+
+		dot_list.op = AST::Operator::Dot;
+		dot_list.left_idx = atom();
+
+		if (!type_is(Token::Type::Dot)) return dot_list.left_idx;
+
+		size_t idx = 0;
+		while (type_is(Token::Type::Dot)) {
+			i++;
+
+			if (idx == 0) idx = dot_list.rest_idx = atom();
+			else          idx = exprs.nodes[idx]->next_statement = atom();
+
+			if (idx == 0) return 0;
+		}
+
+		ast_return_(dot_list);
 	}
 
 	size_t postfix_operator() noexcept {

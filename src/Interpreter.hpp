@@ -69,8 +69,9 @@ struct AST_Interpreter {
 	};
 	struct User_Function_Type {
 		static constexpr size_t return_separator_id = 0;
-		size_t unique_id = 0;;
+		size_t unique_id = 0;
 		size_t start_idx = 0;
+		size_t byte_size = 8;
 		std::vector<size_t>           parameter_type;
 		std::vector<std::string_view> parameter_name;
 
@@ -83,7 +84,7 @@ struct AST_Interpreter {
 		std::unordered_map<std::string_view, size_t, Hasher> name_to_idx;
 		std::vector<size_t> member_types;
 		std::vector<size_t> member_offsets;
-		std::vector<std::any> default_values;
+		std::vector<Value>  default_values;
 	};
 
 	#define LIST_LANG_TYPES(X)\
@@ -103,7 +104,8 @@ struct AST_Interpreter {
 			case Real_Type_Kind: return sizeof(long double);
 			case Pointer_Type_Kind : return sizeof(size_t);
 			case Array_View_Type_Kind   : return sizeof(size_t) + sizeof(size_t);
-			case User_Struct_Type_Kind:  return User_Struct_Type_.byte_size;
+			case User_Struct_Type_Kind  : return User_Struct_Type_.byte_size;
+			case User_Function_Type_Kind: return User_Function_Type_.byte_size;
 			default: return 0;
 			}
 		}
