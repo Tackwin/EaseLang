@@ -45,7 +45,7 @@ int main(int argc, char** argv) noexcept {
 
 	AST_Interpreter ast_interpreter;
 	ast_interpreter.push_builtin();
-	ast_interpreter.variables.reserve(100000);
+	ast_interpreter.scopes.reserve(100000);
 
 	for (size_t i = 1; i < exprs.nodes.size(); ++i) if (exprs.nodes[i]->depth == 0)
 		ast_interpreter.print_value(ast_interpreter.interpret(exprs.nodes, i, file));

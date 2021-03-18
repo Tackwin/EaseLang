@@ -40,6 +40,7 @@ struct Token {
 
 //		KEYWORD
 		Return,
+		Method,
 		Proc,
 		For,
 		While,

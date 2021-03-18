@@ -149,6 +149,10 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 			new_token.type = Token::Type::False;
 			i += 5;
 		}
+		else if (string_comp(i, "method", str)) {
+			new_token.type = Token::Type::Method;
+			i += 6;
+		}
 		else if (isdigit(str[i])) {
 			new_token.type = Token::Type::Number;
 			for (; i < str.size() && isdigit(str[i]) || str[i] == '.'; i++);
@@ -205,6 +209,7 @@ std::string token_type_to_string(Token::Type type) noexcept {
 		case Token::Type::For: return "For";
 		case Token::Type::While: return "While";
 		case Token::Type::Const: return "Const";
+		case Token::Type::Method: return "Method";
 		case Token::Type::Struct: return "Struct";
 		case Token::Type::If: return "If";
 		case Token::Type::Else: return "Else";

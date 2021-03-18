@@ -179,7 +179,8 @@ struct Parser_State {
 		x.depth = current_depth++;
 		defer { current_depth--; };
 
-		if (!type_is(Token::Type::Proc)) return 0;
+		if (!type_is_any({Token::Type::Proc, Token::Type::Method})) return 0;
+		x.is_method = type_is(Token::Type::Method);
 		i++;
 
 		size_t idx = 0;
@@ -404,7 +405,8 @@ struct Parser_State {
 
 	size_t litteral() noexcept {
 
-		if (type_is(Token::Type::Proc))       return function_definition();
+		if (type_is_any({ Token::Type::Proc, Token::Type::Method }))
+			return function_definition();
 		if (type_is(Token::Type::Struct))     return struct_definition();
 		if (type_is(Token::Type::String))     return string_litteral();
 		if (type_is(Token::Type::Number))     return number_litteral();

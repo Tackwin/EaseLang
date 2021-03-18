@@ -27,6 +27,8 @@ struct AST_Interpreter {
 	struct Identifier {
 		size_t memory_idx = 0;
 		size_t type_descriptor_id = 0;
+		size_t parent_idx = 0; // for when you call a function with x.f();
+		size_t parent_type_descriptor_id = 0; // for when you call a function with x.f();
 	};
 	struct Pointer {
 		size_t memory_idx = 0;
@@ -72,6 +74,7 @@ struct AST_Interpreter {
 		size_t unique_id = 0;
 		size_t start_idx = 0;
 		size_t byte_size = 8;
+		bool is_method = false;
 		std::vector<size_t>           parameter_type;
 		std::vector<std::string_view> parameter_name;
 
@@ -130,8 +133,11 @@ struct AST_Interpreter {
 	std::unordered_map<std::string_view, size_t, Hasher> type_name_to_hash;
 	std::unordered_map<size_t, Type> types;
 
-	// Ordered from out most scope to in most scope.
-	std::vector<std::unordered_map<std::string_view, Value, Hasher>> variables;
+	struct Scope {
+		bool fence = false;
+		std::unordered_map<std::string_view, Value, Hasher> variables;
+	};
+	std::vector<Scope> scopes;
 
 	std::unordered_map<std::string_view, Builtin, Hasher> builtins;
 
@@ -166,7 +172,9 @@ struct AST_Interpreter {
 	Type  create_array_view_type(size_t underlying, size_t size) noexcept;
 	Type  type_of(const Value& value) noexcept;
 	Type  type_lookup(std::string_view id) noexcept;
-	Value      lookup(std::string_view id) noexcept;
+	Value lookup(std::string_view id) noexcept;
+	bool  exist_lookup(std::string_view id) noexcept;
+	Value& new_variable(std::string_view id, Value v) noexcept;
 
 	size_t alloc(size_t n_byte) noexcept;
 	Identifier create_id(const Value& from) noexcept;

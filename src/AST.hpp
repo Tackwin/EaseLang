@@ -281,12 +281,16 @@ struct AST {
 		size_t parameter_list_idx = 0;
 		size_t return_list_idx = 0;
 		size_t statement_list_idx = 0;
+		bool is_method = false;
 
 		// Gather all the keyword lol
 		virtual std::string string(
 			std::string_view file, const AST& expressions
 		) const noexcept override {
-			std::string res = "proc";
+			std::string res;
+			
+			if (is_method) res = "method";
+			else           res = "proc";
 
 			size_t idx = 0;
 			if (parameter_list_idx) {

@@ -431,7 +431,7 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 				return nullptr;
 			}
 
-			auto helper = [&] (Identifier user_struct, size_t next, auto& helper) -> Value {
+			auto helper = [&] (Identifier user_struct, size_t next, auto& helper) -> Identifier {
 				if (!next) return user_struct;
 				auto type = types.at(user_struct.type_descriptor_id);
 
@@ -454,15 +454,18 @@ Value AST_Interpreter::list_op(AST_Nodes nodes, size_t idx, std::string_view fil
 							user_struct.memory_idx + type.User_Struct_Type_.member_offsets[idx];
 						id.type_descriptor_id = type.User_Struct_Type_.member_types[idx];
 
-						return helper(id, next_node.next_statement, helper);
+						auto next_id = helper(id, next_node.next_statement, helper);
+						next_id.parent_idx = user_struct.memory_idx;
+						next_id.parent_type_descriptor_id = user_struct.type_descriptor_id;
+						return next_id;
 					}
 					default:
 						printlns("Should not happen.");
-						return nullptr;
+						return {};
 				}
 			};
 
-			return helper(root_struct.cast<Identifier>(), node.rest_idx, helper);
+			return helper(root_struct.Identifier_, node.rest_idx, helper);
 		}
 		default:{
 			println("Unsupported operation %s", AST::op_to_string(node.op));
@@ -587,6 +590,7 @@ Type AST_Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view fil
 
 	User_Function_Type f;
 	f.start_idx = node.statement_list_idx;
+	f.is_method = node.is_method;
 
 	for (size_t idx = node.parameter_list_idx; idx; idx = nodes[idx]->next_statement) {
 		auto& param = nodes[idx].Parameter_;
@@ -627,12 +631,29 @@ Value AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vi
 	auto id = any_id.cast<Identifier>();
 
 	push_scope();
+	scopes.back().fence = true;
 	defer { pop_scope(); };
 
 	auto f = &types.at(id.type_descriptor_id).User_Function_Type_;
+
+	if (f->is_method) {
+		assert(id.parent_idx);
+		assert(id.parent_type_descriptor_id);
+
+		auto parent_struct = types.at(id.parent_type_descriptor_id);
+		assert(parent_struct.typecheck(Type::User_Struct_Type_Kind));
+
+		for (auto& [name, i] : parent_struct.User_Struct_Type_.name_to_idx) {
+			Identifier member;
+			member.memory_idx = parent_struct.User_Struct_Type_.member_offsets[i] + id.parent_idx;
+			member.type_descriptor_id = parent_struct.User_Struct_Type_.member_types[i];
+			new_variable(name, member);
+		}
+	}
+
 	for (size_t i = 0; i < arguments.size(); ++i) {
 		auto name = f->parameter_name[i];
-		variables.back()[name] = arguments[i];
+		new_variable(name, arguments[i]);
 	}
 
 	return interpret(nodes, *f, file);
@@ -740,12 +761,12 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 	auto& node = nodes[idx].Assignement_;
 	auto name = string_view_from_view(file, node.identifier.lexeme);
 
-	if (variables.back().count(name) > 0) {
+	if (exist_lookup(name)) {
 		println("Error variable %*.s already assigned.", (int)name.size(), name.data());
 		return nullptr;
 	}
 
-	auto& var = variables.back()[name];
+	Value var;
 	size_t type_hint = 0;
 
 	// >TODO(Tackwin): handle type info.
@@ -819,7 +840,7 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 		}
 	}
 
-	return var;
+	return new_variable(name, std::move(var));
 }
 
 Value AST_Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
@@ -893,15 +914,29 @@ void AST_Interpreter::print_value(const Value& value) noexcept {
 }
 
 Value AST_Interpreter::lookup(std::string_view id) noexcept {
-	for (auto it = std::rbegin(variables); it != std::rend(variables); it++)
-		for (auto& [x, v] : *it) if (x == id) return v;
+	for (auto it = std::rbegin(scopes); it != std::rend(scopes); it++) {
+		for (auto& [x, v] : it->variables) if (x == id) return v;
+		if (it->fence) break;
+	}
 	for (auto& [x, v] : builtins) if (x == id) return v;
-	println("Can not find variable named %.*s.", (int)id.size(), id.data());
 	return nullptr;
 }
 
-void AST_Interpreter::push_scope() noexcept { variables.emplace_back(); }
-void AST_Interpreter::pop_scope()  noexcept { variables.pop_back(); }
+bool AST_Interpreter::exist_lookup(std::string_view id) noexcept {
+	// >PERF(Tackwin)
+
+	return lookup(id).kind != Value::None_Kind;
+}
+
+AST_Interpreter::Value& AST_Interpreter::new_variable(std::string_view id, Value v) noexcept {
+	assert(scopes.size());
+
+	scopes.back().variables[id] = std::move(v);
+	return scopes.back().variables[id];
+}
+
+void AST_Interpreter::push_scope() noexcept { scopes.emplace_back(); }
+void AST_Interpreter::pop_scope()  noexcept { scopes.pop_back(); }
 
 void AST_Interpreter::push_builtin() noexcept {
 	Builtin print;
