@@ -804,7 +804,7 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 
 				// special case for things like `x : int[10] = 5;`
 				if (type.typecheck(Type::Array_View_Type_Kind)) {
-					auto value_type = types.at(get_type_id(x));
+					auto value_type = types.at(get_underlying_type_id(x));
 					auto& underlying = types.at(type.Array_View_Type_.user_type_descriptor_idx);
 					if (underlying.get_unique_id() != value_type.get_unique_id()) {
 						println(
@@ -833,11 +833,17 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 						);
 						return nullptr;
 					}
+					var = create_id(x);
 				}
 			} else {
 				var = create_id(x);
 			}
 		}
+	} else if (type_hint) {
+		var = Identifier();
+		var.Identifier_.memory_idx = alloc(types.at(type_hint).get_size());
+		var.Identifier_.type_descriptor_id = type_hint;
+		new_variable(name, var);
 	}
 
 	return new_variable(name, std::move(var));
@@ -1058,13 +1064,10 @@ size_t AST_Interpreter::copy(const Value& from, size_t to) noexcept {
 	}
 	if (from.typecheck(Value::Identifier_Kind)) {
 		auto id = from.Identifier_;
-		if (types.at(id.type_descriptor_id).kind != Type::User_Struct_Type_Kind) {
-			return copy(at(id), to);
-		}
 
-		auto user_struct = types.at(id.type_descriptor_id).User_Struct_Type_;
-		memcpy(memory.data() + to, memory.data() + id.memory_idx, user_struct.byte_size);
-		return user_struct.byte_size;
+		auto size = types.at(id.type_descriptor_id).get_size();
+		memcpy(memory.data() + to, memory.data() + id.memory_idx, size);
+		return size;
 	}
 	return 0;
 }
@@ -1113,12 +1116,25 @@ Value AST_Interpreter::at(Identifier id) noexcept {
 	return nullptr;
 }
 
-size_t AST_Interpreter::get_type_id(const Value& x) noexcept {
+size_t AST_Interpreter::get_underlying_type_id(const Value& x) noexcept {
 	if (x.typecheck(Value::Real_Kind))        return Real_Type::unique_id;
 	if (x.typecheck(Value::Bool_Kind))        return Bool_Type::unique_id;
 	if (x.typecheck(Value::Pointer_Kind))     return x.Pointer_.type_descriptor_id;
 	if (x.typecheck(Value::Identifier_Kind))  return x.Identifier_.type_descriptor_id;
 	if (x.typecheck(Value::Array_View_Kind))  return x.Array_View_.type_descriptor_id;
+	return 0;
+}
+size_t AST_Interpreter::get_type_id(const Value& x) noexcept {
+	if (x.typecheck(Value::Real_Kind))        return Real_Type::unique_id;
+	if (x.typecheck(Value::Bool_Kind))        return Bool_Type::unique_id;
+	if (x.typecheck(Value::Pointer_Kind))
+		return hash_combine(x.Pointer_.type_descriptor_id, Pointer_Type::combine_id);
+	if (x.typecheck(Value::Identifier_Kind))  return x.Identifier_.type_descriptor_id;
+	if (x.typecheck(Value::Array_View_Kind))
+		return hash_combine(
+			hash_combine(x.Array_View_.type_descriptor_id, Array_View_Type::combine_id),
+			x.Array_View_.length
+		);
 	return 0;
 }
 void AST_Interpreter::write_ptr(size_t ptr, size_t to) noexcept {

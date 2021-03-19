@@ -7,17 +7,32 @@ main := proc {
 	v := vec2{5, 6};
 	v_ptr : vec2* = &v;
 
-	x := 2356;
-	x_ptr : int* = &x;
-	x_deref : int = *x_ptr;
-	x_ptr_ptr : int** = &x_ptr;
-	x_deref2 : int = **x_ptr_ptr;
+	x : real = 2356;
+	x_ptr : real* = &x;
+	x_deref : real = *x_ptr;
+	x_ptr_ptr : real** = &x_ptr;
+	x_deref2 : real = **x_ptr_ptr;
 
 	print("x", x, "x_ptr", x_ptr, "X_deref", x_deref, "&x", &x, "*x_ptr", *x_ptr);
 	print("x_ptr_ptr", x_ptr_ptr, "x_deref2", x_deref2, "**x_ptr_ptr", **x_ptr_ptr);
 	print("");
 	print("v.x", v.x, "v.y", v.y);
 	print("v_ptr.x", v_ptr.x, "v_ptr.y", v_ptr.y);
+	print("");
+
+	v_ptr.x = 50;
+	v_ptr.y = 60;
+	print("v.x", v.x, "v.y", v.y);
+	print("v_ptr.x", v_ptr.x, "v_ptr.y", v_ptr.y);
+	print("");
+
+	alias := v_ptr;
+	alias.x = 10;
+	alias.y = 20;
+	print("v.x", v.x, "v.y", v.y);
+	print("v_ptr.x", v_ptr.x, "v_ptr.y", v_ptr.y);
+	print("alias.x", alias.x, "alias.y", alias.y);
+	print("");
 };
 
 main();
