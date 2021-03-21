@@ -13,13 +13,6 @@
 // I guess you can't forward decl nested struct in c++ :)))))
 // struct AST { struct Node; };
 struct AST_Interpreter {
-	struct Hasher {
-		size_t operator()(std::string_view str) const noexcept {
-			size_t x = 0;
-			for (auto& c : str) x = hash_combine(x, c);
-			return x;
-		}
-	};
 
 	struct String { std::string x; };
 	struct Bool   { bool          x = 0; };
@@ -84,7 +77,7 @@ struct AST_Interpreter {
 		size_t unique_id = 0;
 		size_t byte_size = 8;
 
-		std::unordered_map<std::string_view, size_t, Hasher> name_to_idx;
+		std::unordered_map<std::string_view, size_t, String_View_Hasher> name_to_idx;
 		std::vector<size_t> member_types;
 		std::vector<size_t> member_offsets;
 		std::vector<Value>  default_values;
@@ -130,16 +123,16 @@ struct AST_Interpreter {
 	};
 
 	std::vector<std::uint8_t> memory;
-	std::unordered_map<std::string_view, size_t, Hasher> type_name_to_hash;
+	std::unordered_map<std::string_view, size_t, String_View_Hasher> type_name_to_hash;
 	std::unordered_map<size_t, Type> types;
 
 	struct Scope {
 		bool fence = false;
-		std::unordered_map<std::string_view, Value, Hasher> variables;
+		std::unordered_map<std::string_view, Value, String_View_Hasher> variables;
 	};
 	std::vector<Scope> scopes;
 
-	std::unordered_map<std::string_view, Builtin, Hasher> builtins;
+	std::unordered_map<std::string_view, Builtin, String_View_Hasher> builtins;
 
 	using AST_Nodes = const std::vector<AST::Node>&;
 

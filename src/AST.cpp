@@ -480,12 +480,27 @@ struct Parser_State {
 		AST::Operation_List x;
 		x.scope = current_scope;
 		x.depth = current_depth;
+		
+		std::function<void(size_t)> inc_depth;
+		inc_depth = [&] (size_t i) {
+			exprs.nodes[i]->depth++;
+			if (exprs.nodes[i].typecheck(AST::Node::Operation_List_Kind)) {
+				inc_depth(exprs.nodes[i].Operation_List_.left_idx);
+				for (
+					size_t n = exprs.nodes[i].Operation_List_.rest_idx;
+					n;
+					n = exprs.nodes[n]->next_statement
+				) inc_depth(n);
+			}
+		};
 
 		if (it + 1 == ops.size()) x.left_idx = factor();
 		else                      x.left_idx = expression_helper(ops, it + 1);
 
 		if (!type_is(ops[it])) return x.left_idx;
 		else                       x.op = cast_to_op(tokens[i].type);
+
+		inc_depth(x.left_idx);
 
 		size_t idx = 0;
 		while ( type_is(ops[it]) && i++) {
@@ -495,6 +510,7 @@ struct Parser_State {
 
 			if (!idx) idx = x.rest_idx = t;
 			else      idx = exprs.nodes[idx]->next_statement = t;
+			inc_depth(idx);
 			if (!idx) return 0;
 		}
 

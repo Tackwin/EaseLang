@@ -573,7 +573,7 @@ Type AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view f
 		desc.member_offsets.push_back(running_offset);
 		desc.default_values.push_back(member);
 
-		desc.unique_id = hash_combine(desc.unique_id, Hasher()(name));
+		desc.unique_id = hash_combine(desc.unique_id, String_View_Hasher()(name));
 		desc.unique_id = hash_combine(desc.unique_id, desc.member_types.back());
 
 		running_offset += types.at(desc.member_types.back()).get_size();

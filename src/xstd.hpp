@@ -33,6 +33,13 @@ static std::string string_from_view(std::string_view src, View view) noexcept {
 static std::string_view string_view_from_view(std::string_view src, View view) noexcept {
 	return std::string_view(src.data() + view.i, view.size);
 }
+struct String_View_Hasher {
+	size_t operator()(std::string_view str) const noexcept {
+		size_t x = 0;
+		for (auto& c : str) x = hash_combine(x, c);
+		return x;
+	}
+};
 
 namespace details {
 	template<typename Callable>
