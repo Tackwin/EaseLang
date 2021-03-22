@@ -3,7 +3,7 @@
 
 #include <thread>
 
-#define decl(name) void name(\
+#define decl(name) size_t name(\
 const std::vector<AST::Node>& nodes, size_t idx, Program& program, std::string_view file\
 ) noexcept
 
@@ -32,13 +32,55 @@ decl(init_list    );
 decl(array_access );
 
 
-decl(identifier) {}  // identifier are effect free expressions in itself
+decl(identifier) {
+	auto& node = nodes[idx].Identifier_;
+	auto id = program.interpreter.lookup(string_view_from_view(file, node.token.lexeme));
+
+	auto& type = program.interpreter.types.at(id.Identifier_.type_descriptor_id);
+
+	size_t to = program.stack_ptr;
+	emit(IS::Push({ type.get_size() }));
+	emit(IS::Cpy({ id.Identifier_.memory_idx, to, type.get_size() }));
+
+	program.stack_ptr += type.get_size();
+
+	return type.get_unique_id();
+}
 decl(assignement) {
 	auto& node = nodes[idx].Assignement_;
 
 	auto name = string_view_from_view(file, node.identifier.lexeme);
-	
 
+	size_t type_hint = 0;
+
+	AST_Interpreter::Identifier id;
+	if (node.type_identifier) {
+		auto t = program.interpreter.type_interpret(nodes, *node.type_identifier, file);
+		type_hint = t.get_unique_id();
+	}
+
+	if (node.value_idx) {
+		size_t type = expression(nodes, *node.value_idx, program, file);
+
+		size_t n = program.interpreter.types.at(type).get_size();
+		size_t to = program.stack_ptr;
+		size_t from = program.stack_ptr - n;
+
+		id.memory_idx = to;
+		id.type_descriptor_id = type_hint;
+
+		emit(IS::Push({ n }));
+		emit(IS::Cpy({ from, to, n }));
+		program.stack_ptr += n;
+	} else if (type_hint) {
+		id.memory_idx = program.stack_ptr;
+		id.type_descriptor_id = type_hint;
+		emit(IS::Push({ program.interpreter.types.at(type_hint).get_size() }));
+		program.stack_ptr += program.interpreter.types.at(type_hint).get_size();
+	}
+
+	program.interpreter.new_variable(name, id);
+	return 0;
 }
 decl(litteral) {
 	auto& node = nodes[idx].Litteral_;
@@ -50,19 +92,24 @@ decl(litteral) {
 		temp.resize(view.size);
 		memcpy(temp.data(), file.data() + view.i, view.size);
 		char* end_ptr;
-		long double x = std::strtod(temp.c_str(), &end_ptr);
+		long double x = std::strtold(temp.c_str(), &end_ptr);
 
 		emit(IS::Constant{ alloc_constant(program, x) });
-		return;
+		program.stack_ptr += sizeof(x);
+		return AST_Interpreter::Real_Type::unique_id;
 	}
 	if (node.token.type == Token::Type::True) {
 		emit(IS::True{});
-		return;
+		program.stack_ptr += 1;
+		return AST_Interpreter::Bool_Type::unique_id;
 	}
 	if (node.token.type == Token::Type::False) {
 		emit(IS::False{});
-		return;
+		program.stack_ptr += 1;
+		return AST_Interpreter::Bool_Type::unique_id;
 	}
+
+	return 0;
 }
 decl(list_op) {
 	auto& node = nodes[idx].Operation_List_;
@@ -72,10 +119,11 @@ decl(list_op) {
 	expression(nodes, node.rest_idx, program, file);
 
 	switch (node.op) {
-	case AST::Operator::Plus:  emit(IS::Add{}); break;
-	case AST::Operator::Minus: emit(IS::Sub{}); break;
-	case AST::Operator::Star:  emit(IS::Mul{}); break;
+	case AST::Operator::Plus:  emit(IS::Add{}); program.stack_ptr -= sizeof(long double); break;
+	case AST::Operator::Minus: emit(IS::Sub{}); program.stack_ptr -= sizeof(long double); break;
+	case AST::Operator::Star:  emit(IS::Mul{}); program.stack_ptr -= sizeof(long double); break;
 	}
+	return AST_Interpreter::Real_Type::unique_id;
 }
 decl(unary_op) {
 	auto& node = nodes[idx].Unary_Operation_;
@@ -83,34 +131,42 @@ decl(unary_op) {
 	expression(nodes, node.right_idx, program, file);
 
 	switch(node.op) {
-		case AST::Operator::Minus: emit(IS::Neg{}); break;
-		case AST::Operator::Not:   emit(IS::Not{}); break;
+		case AST::Operator::Minus: emit(IS::Neg{}); return AST_Interpreter::Real_Type::unique_id;
+		case AST::Operator::Not:   emit(IS::Not{}); return AST_Interpreter::Bool_Type::unique_id;
+		default:                                    return 0;
 	}
+
 }
 decl(expression) {
 	auto& node = nodes[idx];
 	auto in = nodes[idx].Expression_.inner_idx;
 
 	switch (node.kind) {
-	case AST::Node::Identifier_Kind:          identifier   (nodes, idx, program, file); break;
-	case AST::Node::Assignement_Kind:         assignement  (nodes, idx, program, file); break;
-	case AST::Node::Litteral_Kind:            litteral     (nodes, idx, program, file); break;
-	case AST::Node::Operation_List_Kind:      list_op      (nodes, idx, program, file); break;
-	case AST::Node::Unary_Operation_Kind:     unary_op     (nodes, idx, program, file); break;
-	case AST::Node::Expression_Kind:          expression   (nodes, in , program, file); break;
-	case AST::Node::If_Kind:                  if_call      (nodes, idx, program, file); break;
-	case AST::Node::For_Kind:                 for_loop     (nodes, idx, program, file); break;
-	case AST::Node::While_Kind:               while_loop   (nodes, idx, program, file); break;
-	case AST::Node::Function_Call_Kind:       function_call(nodes, idx, program, file); break;
-	case AST::Node::Return_Call_Kind:         return_call  (nodes, idx, program, file); break;
-	case AST::Node::Initializer_List_Kind:    init_list    (nodes, idx, program, file); break;
-	case AST::Node::Array_Access_Kind:        array_access (nodes, idx, program, file); break;
-	default:                                  nullptr;
+	case AST::Node::Identifier_Kind:          return identifier   (nodes, idx, program, file);
+	case AST::Node::Assignement_Kind:         return assignement  (nodes, idx, program, file);
+	case AST::Node::Litteral_Kind:            return litteral     (nodes, idx, program, file);
+	case AST::Node::Operation_List_Kind:      return list_op      (nodes, idx, program, file);
+	case AST::Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, program, file);
+	case AST::Node::Expression_Kind:          return expression   (nodes, in , program, file);
+	case AST::Node::If_Kind:                  return if_call      (nodes, idx, program, file);
+	case AST::Node::For_Kind:                 return for_loop     (nodes, idx, program, file);
+	case AST::Node::While_Kind:               return while_loop   (nodes, idx, program, file);
+	case AST::Node::Function_Call_Kind:       return function_call(nodes, idx, program, file);
+	case AST::Node::Return_Call_Kind:         return return_call  (nodes, idx, program, file);
+	case AST::Node::Initializer_List_Kind:    return init_list    (nodes, idx, program, file);
+	case AST::Node::Array_Access_Kind:        return array_access (nodes, idx, program, file);
+	default:                                  return 0;
 	}
 }
-decl(if_call) {}
-decl(for_loop) {}
-decl(while_loop) {}
+decl(if_call) {
+	return 0;
+}
+decl(for_loop) {
+	return 0;
+}
+decl(while_loop) {
+	return 0;
+}
 decl(function_call) {
 	auto& node = nodes[idx].Function_Call_;
 	auto name = string_view_from_view(file, nodes[node.identifier_idx].Identifier_.token.lexeme);
@@ -120,10 +176,17 @@ decl(function_call) {
 		);
 		emit(IS::Print{});
 	}
+	return 0;
 }
-decl(return_call) {}
-decl(init_list) {}
-decl(array_access) {}
+decl(return_call) {
+	return 0;
+}
+decl(init_list) {
+	return 0;
+}
+decl(array_access) {
+	return 0;
+}
 
 extern Program compile(
 	const std::vector<AST::Node>& nodes,
@@ -198,6 +261,32 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 				printf("[%zu] %Lf\n", ip, x);
 				break;
 			}
+			case IS::Instruction::True_Kind: {
+				push_stack<bool>(true, stack);
+				break;
+			}
+			case IS::Instruction::False_Kind: {
+				push_stack<bool>(false, stack);
+				break;
+			}
+			case IS::Instruction::Push_Kind: {
+				stack.resize(stack.size() + inst.Push_.n);
+				break;
+			}
+			case IS::Instruction::Cpy_Kind: {
+				memcpy(
+					stack.data() + inst.Cpy_.to,
+					stack.data() + inst.Cpy_.from,
+					inst.Cpy_.n
+				);
+				break;
+			}
 		}
+
+		printf("|");
+		for (size_t i = 0; i < stack.size(); i += sizeof(long double)) {
+			printf("%10.5Lf|", *reinterpret_cast<long double*>(stack.data() + i));
+		}
+		printf("\n");
 	}
 }

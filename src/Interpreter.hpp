@@ -187,5 +187,5 @@ struct AST_Interpreter {
 	size_t get_type_id(const Value& x) noexcept;
 	size_t get_underlying_type_id(const Value& x) noexcept;
 
-	AST_Interpreter() noexcept { memory.push_back(0); push_scope(); }
+	AST_Interpreter() noexcept { memory.push_back(0); push_builtin(); push_scope(); }
 };

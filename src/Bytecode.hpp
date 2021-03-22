@@ -5,13 +5,21 @@
 #include <vector>
 #include <unordered_map>
 
-#include "AST.hpp"
 #include "xstd.hpp"
+#include "Interpreter.hpp"
 
 namespace IS {
 
 	struct Constant {
 		size_t ptr = 0;
+	};
+	struct Push {
+		size_t n = 0;
+	};
+	struct Cpy {
+		size_t from = 0;
+		size_t to = 0;
+		size_t n = 0;
 	};
 	struct True  {};
 	struct False {};
@@ -26,7 +34,7 @@ namespace IS {
 
 	#define IS_LIST(X)\
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) \
-	X(Print)
+	X(Print) X(Push) X(Cpy)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);
@@ -36,6 +44,12 @@ namespace IS {
 			if (typecheck(Constant_Kind)) {
 				printf(" const:[%zu]", Constant_.ptr);
 			}
+			if (typecheck(Push_Kind)) {
+				printf(" %zu", Push_.n);
+			}
+			if (typecheck(Cpy_Kind)) {
+				printf(" stack:[%zu], stack:[%zu], %zu ; from, to, n", Cpy_.from, Cpy_.to, Cpy_.n);
+			}
 			printf("\n");
 		}
 	};
@@ -44,6 +58,11 @@ namespace IS {
 struct Program {
 	std::vector<std::uint8_t>    data;
 	std::vector<IS::Instruction> code;
+
+	size_t stack_ptr = 0;
+
+	AST_Interpreter interpreter;
+
 
 	void debug() const noexcept;
 };

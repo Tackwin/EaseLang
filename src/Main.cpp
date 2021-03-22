@@ -21,7 +21,6 @@ void interpret(std::string file) noexcept {
 	printf("\nPrettyied\n\n");
 
 	AST_Interpreter ast_interpreter;
-	ast_interpreter.push_builtin();
 	ast_interpreter.scopes.reserve(100000);
 
 	for (size_t i = 1; i < exprs.nodes.size(); ++i) if (exprs.nodes[i]->depth == 0)
