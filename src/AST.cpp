@@ -642,7 +642,7 @@ struct Parser_State {
 		if (type_is(Token::Type::Open_Paran)) {
 			i++;
 
-			AST::Expression x;
+			AST::Group_Expression x;
 			x.scope = current_scope;
 			x.depth = current_depth++;
 			defer { current_depth--; };

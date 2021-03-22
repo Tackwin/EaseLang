@@ -22,11 +22,11 @@ struct AST {
 		size_t next_statement = 0;
 	};
 
-	struct Expression : Statement {
+	struct Group_Expression : Statement {
 		size_t inner_idx = 0;
 
 		virtual std::string string(std::string_view str, const AST& expr) const noexcept {
-			return expr.nodes[inner_idx]->string(str, expr);
+			return "(" + expr.nodes[inner_idx]->string(str, expr) + ")";
 		}
 	};
 
@@ -469,7 +469,7 @@ struct AST {
 	#define LIST_AST_TYPE(X)\
 		X(Parameter          )\
 		X(Argument           )\
-		X(Expression         )\
+		X(Group_Expression   )\
 		X(Return_Parameter   )\
 		X(Assignement        )\
 		X(Identifier         )\

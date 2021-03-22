@@ -140,7 +140,7 @@ struct AST_Interpreter {
 	Value unary_op     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value list_op      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value factor       (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	Value expression   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value group_expr   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value identifier   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value assignement  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value if_call      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;

@@ -16,9 +16,23 @@ namespace IS {
 	struct Push {
 		size_t n = 0;
 	};
+	struct Alloc {
+		size_t n = 0;
+	};
+	struct Pop {
+		size_t n = 0;
+	};
 	struct Cpy {
 		size_t from = 0;
 		size_t to = 0;
+		size_t n = 0;
+	};
+	struct Load {
+		size_t memory_ptr = 0;
+		size_t n = 0;
+	};
+	struct Save {
+		size_t memory_ptr = 0;
 		size_t n = 0;
 	};
 	struct True  {};
@@ -34,21 +48,33 @@ namespace IS {
 
 	#define IS_LIST(X)\
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) \
-	X(Print) X(Push) X(Cpy)
+	X(Print) X(Push) X(Cpy) X(Pop) X(Load) X(Save) X(Alloc)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);
 
 		void debug() const noexcept {
-			printf("%s", name());
+			printf("%-10s", name());
 			if (typecheck(Constant_Kind)) {
-				printf(" const:[%zu]", Constant_.ptr);
+				printf(": const:[%zu]", Constant_.ptr);
 			}
 			if (typecheck(Push_Kind)) {
-				printf(" %zu", Push_.n);
+				printf(": %zu", Push_.n);
+			}
+			if (typecheck(Pop_Kind)) {
+				printf(": %zu", Pop_.n);
+			}
+			if (typecheck(Alloc_Kind)) {
+				printf(": %zu", Alloc_.n);
+			}
+			if (typecheck(Load_Kind)) {
+				printf(": mem:[%zu], %zu", Load_.memory_ptr, Load_.n);
+			}
+			if (typecheck(Save_Kind)) {
+				printf(": mem:[%zu], %zu", Save_.memory_ptr, Save_.n);
 			}
 			if (typecheck(Cpy_Kind)) {
-				printf(" stack:[%zu], stack:[%zu], %zu ; from, to, n", Cpy_.from, Cpy_.to, Cpy_.n);
+				printf(": stack:[%zu], stack:[%zu], %zu ; from, to, n", Cpy_.from, Cpy_.to, Cpy_.n);
 			}
 			printf("\n");
 		}
@@ -60,9 +86,9 @@ struct Program {
 	std::vector<IS::Instruction> code;
 
 	size_t stack_ptr = 0;
+	size_t memory_stack_ptr = 0;
 
 	AST_Interpreter interpreter;
-
 
 	void debug() const noexcept;
 };
@@ -74,6 +100,7 @@ extern Program compile(
 
 struct Bytecode_VM {
 	std::vector<std::uint8_t> stack;
+	std::vector<std::uint8_t> memory;
 
 	size_t immediate_register = 0;
 

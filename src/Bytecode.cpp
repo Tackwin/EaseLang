@@ -16,13 +16,13 @@ size_t alloc_constant(Program& prog, long double constant) noexcept {
 }
 
 
-
+decl(expression   );
 decl(identifier   );
 decl(assignement  );
 decl(litteral     );
 decl(list_op      );
 decl(unary_op     );
-decl(expression   );
+decl(group_expr   );
 decl(if_call      );
 decl(for_loop     );
 decl(while_loop   );
@@ -31,6 +31,31 @@ decl(return_call  );
 decl(init_list    );
 decl(array_access );
 
+decl(expression) {
+	auto& node = nodes[idx];
+
+	size_t ret;
+
+	switch (node.kind) {
+	case AST::Node::Identifier_Kind:          ret = identifier   (nodes, idx, program, file); break;
+	case AST::Node::Assignement_Kind:         ret = assignement  (nodes, idx, program, file); break;
+	case AST::Node::Litteral_Kind:            ret = litteral     (nodes, idx, program, file); break;
+	case AST::Node::Operation_List_Kind:      ret = list_op      (nodes, idx, program, file); break;
+	case AST::Node::Unary_Operation_Kind:     ret = unary_op     (nodes, idx, program, file); break;
+	case AST::Node::Group_Expression_Kind:    ret = group_expr   (nodes, idx, program, file); break;
+	case AST::Node::If_Kind:                  ret = if_call      (nodes, idx, program, file); break;
+	case AST::Node::For_Kind:                 ret = for_loop     (nodes, idx, program, file); break;
+	case AST::Node::While_Kind:               ret = while_loop   (nodes, idx, program, file); break;
+	case AST::Node::Function_Call_Kind:       ret = function_call(nodes, idx, program, file); break;
+	case AST::Node::Return_Call_Kind:         ret = return_call  (nodes, idx, program, file); break;
+	case AST::Node::Initializer_List_Kind:    ret = init_list    (nodes, idx, program, file); break;
+	case AST::Node::Array_Access_Kind:        ret = array_access (nodes, idx, program, file); break;
+	default:                                  ret = 0;
+	}
+
+	return ret;
+}
+
 
 decl(identifier) {
 	auto& node = nodes[idx].Identifier_;
@@ -38,47 +63,42 @@ decl(identifier) {
 
 	auto& type = program.interpreter.types.at(id.Identifier_.type_descriptor_id);
 
-	size_t to = program.stack_ptr;
-	emit(IS::Push({ type.get_size() }));
-	emit(IS::Cpy({ id.Identifier_.memory_idx, to, type.get_size() }));
-
+	emit(IS::Load({ id.Identifier_.memory_idx, type.get_size() }));
 	program.stack_ptr += type.get_size();
 
 	return type.get_unique_id();
 }
 decl(assignement) {
 	auto& node = nodes[idx].Assignement_;
+	size_t last_ptr = program.memory_stack_ptr;
 
 	auto name = string_view_from_view(file, node.identifier.lexeme);
 
 	size_t type_hint = 0;
+	size_t type_hint_size = 0;
 
 	AST_Interpreter::Identifier id;
+	id.memory_idx = program.memory_stack_ptr;
+	
 	if (node.type_identifier) {
 		auto t = program.interpreter.type_interpret(nodes, *node.type_identifier, file);
 		type_hint = t.get_unique_id();
+		type_hint_size = t.get_size();
 	}
 
 	if (node.value_idx) {
-		size_t type = expression(nodes, *node.value_idx, program, file);
+		type_hint = expression(nodes, *node.value_idx, program, file);
+		type_hint_size = program.interpreter.types.at(type_hint).get_size();
+		emit(IS::Alloc{ type_hint_size });
 
-		size_t n = program.interpreter.types.at(type).get_size();
-		size_t to = program.stack_ptr;
-		size_t from = program.stack_ptr - n;
-
-		id.memory_idx = to;
-		id.type_descriptor_id = type_hint;
-
-		emit(IS::Push({ n }));
-		emit(IS::Cpy({ from, to, n }));
-		program.stack_ptr += n;
+		emit(IS::Save({ program.memory_stack_ptr, type_hint_size }));
 	} else if (type_hint) {
-		id.memory_idx = program.stack_ptr;
-		id.type_descriptor_id = type_hint;
-		emit(IS::Push({ program.interpreter.types.at(type_hint).get_size() }));
-		program.stack_ptr += program.interpreter.types.at(type_hint).get_size();
+		emit(IS::Alloc{ type_hint_size });
 	}
 
+	program.memory_stack_ptr += type_hint_size;
+
+	id.type_descriptor_id = type_hint;
 	program.interpreter.new_variable(name, id);
 	return 0;
 }
@@ -100,12 +120,12 @@ decl(litteral) {
 	}
 	if (node.token.type == Token::Type::True) {
 		emit(IS::True{});
-		program.stack_ptr += 1;
+		program.stack_ptr++;
 		return AST_Interpreter::Bool_Type::unique_id;
 	}
 	if (node.token.type == Token::Type::False) {
 		emit(IS::False{});
-		program.stack_ptr += 1;
+		program.stack_ptr++;
 		return AST_Interpreter::Bool_Type::unique_id;
 	}
 
@@ -119,10 +139,12 @@ decl(list_op) {
 	expression(nodes, node.rest_idx, program, file);
 
 	switch (node.op) {
-	case AST::Operator::Plus:  emit(IS::Add{}); program.stack_ptr -= sizeof(long double); break;
-	case AST::Operator::Minus: emit(IS::Sub{}); program.stack_ptr -= sizeof(long double); break;
-	case AST::Operator::Star:  emit(IS::Mul{}); program.stack_ptr -= sizeof(long double); break;
+	case AST::Operator::Plus:  emit(IS::Add{}); break;
+	case AST::Operator::Minus: emit(IS::Sub{}); break;
+	case AST::Operator::Star:  emit(IS::Mul{}); break;
 	}
+
+	program.stack_ptr -= sizeof(long double);
 	return AST_Interpreter::Real_Type::unique_id;
 }
 decl(unary_op) {
@@ -137,26 +159,8 @@ decl(unary_op) {
 	}
 
 }
-decl(expression) {
-	auto& node = nodes[idx];
-	auto in = nodes[idx].Expression_.inner_idx;
-
-	switch (node.kind) {
-	case AST::Node::Identifier_Kind:          return identifier   (nodes, idx, program, file);
-	case AST::Node::Assignement_Kind:         return assignement  (nodes, idx, program, file);
-	case AST::Node::Litteral_Kind:            return litteral     (nodes, idx, program, file);
-	case AST::Node::Operation_List_Kind:      return list_op      (nodes, idx, program, file);
-	case AST::Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, program, file);
-	case AST::Node::Expression_Kind:          return expression   (nodes, in , program, file);
-	case AST::Node::If_Kind:                  return if_call      (nodes, idx, program, file);
-	case AST::Node::For_Kind:                 return for_loop     (nodes, idx, program, file);
-	case AST::Node::While_Kind:               return while_loop   (nodes, idx, program, file);
-	case AST::Node::Function_Call_Kind:       return function_call(nodes, idx, program, file);
-	case AST::Node::Return_Call_Kind:         return return_call  (nodes, idx, program, file);
-	case AST::Node::Initializer_List_Kind:    return init_list    (nodes, idx, program, file);
-	case AST::Node::Array_Access_Kind:        return array_access (nodes, idx, program, file);
-	default:                                  return 0;
-	}
+decl(group_expr) {
+	return expression(nodes, nodes[idx].Group_Expression_.inner_idx, program, file);
 }
 decl(if_call) {
 	return 0;
@@ -195,7 +199,10 @@ extern Program compile(
 	Program program;
 
 	for (size_t idx = 1; idx < nodes.size(); ++idx) if (nodes[idx]->depth == 0) {
+		size_t stack_ptr = program.stack_ptr;
 		expression(nodes, idx, program, file);
+		emit(IS::Pop({ program.stack_ptr - stack_ptr }));
+		program.stack_ptr = stack_ptr;
 	}
 
 	return program;
@@ -221,6 +228,10 @@ template<typename T>
 void push_stack(T x, std::vector<std::uint8_t>& stack) noexcept {
 	stack.resize(stack.size() + sizeof(T));
 	memcpy(stack.data() + stack.size() - sizeof(T), &x, sizeof(T));
+}
+void push_stack(std::vector<std::uint8_t>& stack, const std::uint8_t* data, size_t n) noexcept {
+	stack.resize(stack.size() + n);
+	memcpy(stack.data() + stack.size() - n, data, n);
 }
 
 void Bytecode_VM::execute(const Program& program) noexcept {
@@ -273,20 +284,44 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 				stack.resize(stack.size() + inst.Push_.n);
 				break;
 			}
+			case IS::Instruction::Pop_Kind: {
+				stack.resize(stack.size() - inst.Pop_.n);
+				break;
+			}
 			case IS::Instruction::Cpy_Kind: {
-				memcpy(
+				memmove(
 					stack.data() + inst.Cpy_.to,
 					stack.data() + inst.Cpy_.from,
 					inst.Cpy_.n
 				);
 				break;
 			}
+			case IS::Instruction::Load_Kind: {
+				push_stack(stack, memory.data() + inst.Load_.memory_ptr, inst.Load_.n);
+				break;
+			}
+			case IS::Instruction::Save_Kind: {
+				assert(memory.size() >= inst.Save_.memory_ptr + inst.Save_.n);
+				memcpy(
+					memory.data() + inst.Save_.memory_ptr,
+					stack.data() + stack.size() - inst.Save_.n,
+					inst.Save_.n
+				);
+				break;
+			}
+			case IS::Instruction::Alloc_Kind: {
+				memory.resize(memory.size() + inst.Alloc_.n);
+				break;
+			}
 		}
 
-		printf("|");
+		size_t col = 0;
+		col += printf("|");
 		for (size_t i = 0; i < stack.size(); i += sizeof(long double)) {
-			printf("%10.5Lf|", *reinterpret_cast<long double*>(stack.data() + i));
+			col +=  printf("%10.5Lf|", *reinterpret_cast<long double*>(stack.data() + i));
 		}
-		printf("\n");
+		for (col %= 100; col < 100; ++col) printf(" ");
+		inst.debug();
+		fflush(stdout);
 	}
 }

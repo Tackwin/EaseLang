@@ -17,7 +17,7 @@ Value AST_Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view f
 	case AST::Node::Litteral_Kind:            return litteral     (nodes, idx, file);
 	case AST::Node::Operation_List_Kind:      return list_op      (nodes, idx, file);
 	case AST::Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, file);
-	case AST::Node::Expression_Kind:          return expression   (nodes, idx, file);
+	case AST::Node::Group_Expression_Kind:    return group_expr   (nodes, idx, file);
 	case AST::Node::If_Kind:                  return if_call      (nodes, idx, file);
 	case AST::Node::For_Kind:                 return for_loop     (nodes, idx, file);
 	case AST::Node::While_Kind:               return while_loop   (nodes, idx, file);
@@ -879,8 +879,8 @@ Value AST_Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view fi
 	return nullptr;
 }
 
-Value AST_Interpreter::expression(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
-	return interpret(nodes, nodes[idx].Expression_.inner_idx, file);
+Value AST_Interpreter::group_expr(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+	return interpret(nodes, nodes[idx].Group_Expression_.inner_idx, file);
 }
 
 void AST_Interpreter::print_value(const Value& value) noexcept {
