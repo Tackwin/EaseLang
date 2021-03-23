@@ -1,3 +1,12 @@
+f := proc () -> real {
+	a : real = 5;
+	b := a + 1;
+	print(b);
+	return 7;
+};
+
 x : real = 2;
 y : real = x * 51;
 print(y);
+z : real = 10;
+print(z);

@@ -7,7 +7,7 @@
 const std::vector<AST::Node>& nodes, size_t idx, Program& program, std::string_view file\
 ) noexcept
 
-#define emit(x) program.code.push_back(x);
+#define emit(x) program.current_function->push_back(x);
 
 size_t alloc_constant(Program& prog, long double constant) noexcept {
 	prog.data.resize(prog.data.size() + sizeof(constant));
@@ -88,17 +88,39 @@ decl(assignement) {
 
 	if (node.value_idx) {
 		type_hint = expression(nodes, *node.value_idx, program, file);
-		type_hint_size = program.interpreter.types.at(type_hint).get_size();
-		emit(IS::Alloc{ type_hint_size });
+		if (!type_hint) { // if expression return false that means that we are dealing with
+		                  // a type definition like vec2 := struct { x := 0; y := 0; };
 
-		emit(IS::Save({ program.memory_stack_ptr, type_hint_size }));
+			auto t = program.interpreter.type_interpret(nodes, *node.value_idx, file);
+
+			if (t.typecheck(AST_Interpreter::Type::User_Function_Type_Kind)) {
+				id.memory_idx = program.functions.size();
+				id.type_descriptor_id = t.User_Function_Type_.unique_id;
+
+				program.functions.emplace_back();
+				program.compile_function(
+					nodes,
+					*node.value_idx,
+					program.functions.back(),
+					file
+				);
+			}
+
+		} else {
+			type_hint_size = program.interpreter.types.at(type_hint).get_size();
+			emit(IS::Alloc{ type_hint_size });
+
+			emit(IS::Save({ program.memory_stack_ptr, type_hint_size }));
+			id.type_descriptor_id = type_hint;
+		}
+
 	} else if (type_hint) {
 		emit(IS::Alloc{ type_hint_size });
+		id.type_descriptor_id = type_hint;
 	}
 
 	program.memory_stack_ptr += type_hint_size;
 
-	id.type_descriptor_id = type_hint;
 	program.interpreter.new_variable(name, id);
 	return 0;
 }
@@ -179,10 +201,31 @@ decl(function_call) {
 			nodes, nodes[node.argument_list_idx].Argument_.value_idx, program, file
 		);
 		emit(IS::Print{});
+		return 0;
 	}
-	return 0;
+
+	for (size_t i = node.argument_list_idx; i; i = nodes[i]->next_statement) {
+		expression(nodes, i, program, file);
+	}
+
+	auto id = program.interpreter.lookup(name);
+	emit(IS::Call{ id.Identifier_.memory_idx });
+
+	auto f = program.interpreter.types.at(id.Identifier_.type_descriptor_id).User_Function_Type_;
+	auto return_type = program.interpreter.types.at(f.return_type.front()).get_unique_id();
+
+	return return_type;
 }
 decl(return_call) {
+	auto& node = nodes[idx].Return_Call_;
+
+	size_t program_stack = program.stack_ptr;
+
+	for (size_t i = node.return_value_idx; i; i = nodes[i]->next_statement) {
+		expression(nodes, i, program, file);
+	}
+
+	emit(IS::Ret{ program.stack_ptr - program_stack });
 	return 0;
 }
 decl(init_list) {
@@ -190,6 +233,52 @@ decl(init_list) {
 }
 decl(array_access) {
 	return 0;
+}
+
+
+void Program::compile_function(
+	const std::vector<AST::Node>& nodes,
+	size_t idx,
+	std::vector<IS::Instruction>& func,
+	std::string_view file
+) noexcept {
+	auto& node = nodes[idx].Function_Definition_;
+
+	auto old_memory_stack_ptr = memory_stack_ptr;
+	auto old_function = current_function;
+	defer { memory_stack_ptr = old_memory_stack_ptr; };
+	defer { current_function = old_function; };
+
+	memory_stack_ptr = 0;
+	current_function = &func;
+
+	interpreter.push_scope();
+	interpreter.scopes.back().fence = true;
+
+	size_t running = 0;
+	for (size_t i = node.parameter_list_idx; i; i = nodes[i]->next_statement) {
+		auto& param = nodes[i].Parameter_;
+
+		auto name = string_view_from_view(file, param.name.lexeme);
+
+		AST_Interpreter::Identifier id;
+		id.memory_idx = running;
+		id.type_descriptor_id =
+			interpreter.type_interpret(nodes, param.type_identifier, file).get_unique_id();
+
+		running += interpreter.types.at(id.type_descriptor_id).get_size();
+
+		interpreter.new_variable(name, id);
+	}
+
+	for (size_t i = node.statement_list_idx; i; i = nodes[i]->next_statement) {
+		size_t old_stack_ptr = stack_ptr;
+		expression(nodes, i, *this, file);
+		func.push_back(IS::Pop({ stack_ptr - old_stack_ptr }));
+		stack_ptr = old_stack_ptr;
+	}
+
+	func.push_back(IS::Ret{});
 }
 
 extern Program compile(
@@ -204,6 +293,21 @@ extern Program compile(
 		emit(IS::Pop({ program.stack_ptr - stack_ptr }));
 		program.stack_ptr = stack_ptr;
 	}
+
+	emit(IS::Exit());
+
+	std::unordered_map<size_t, size_t> map_idx;
+	for (size_t i = 0; i < program.functions.size(); ++i) {
+		map_idx[i] = program.code.size();
+		program.code.insert(
+			std::end(program.code),
+			std::begin(program.functions[i]),
+			std::end(program.functions[i])
+		);
+	}
+
+	for (auto& x : program.code) if (x.typecheck(IS::Instruction::Call_Kind))
+		x.Call_.f_idx = map_idx[x.Call_.f_idx];
 
 	return program;
 }
@@ -288,14 +392,6 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 				stack.resize(stack.size() - inst.Pop_.n);
 				break;
 			}
-			case IS::Instruction::Cpy_Kind: {
-				memmove(
-					stack.data() + inst.Cpy_.to,
-					stack.data() + inst.Cpy_.from,
-					inst.Cpy_.n
-				);
-				break;
-			}
 			case IS::Instruction::Load_Kind: {
 				push_stack(stack, memory.data() + inst.Load_.memory_ptr, inst.Load_.n);
 				break;
@@ -311,6 +407,25 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 			}
 			case IS::Instruction::Alloc_Kind: {
 				memory.resize(memory.size() + inst.Alloc_.n);
+				break;
+			}
+			case IS::Instruction::Call_Kind: {
+				call_stack.push_back(ip + 1);
+				stack_frame.push_back(memory.size());
+				ip = inst.Call_.f_idx - 1;
+				break;
+			}
+			case IS::Instruction::Ret_Kind: {
+				ip = call_stack.back() - 1;
+				memory.resize(stack_frame.back());
+				
+				call_stack.pop_back();
+				stack_frame.pop_back();
+
+				break;
+			}
+			case IS::Instruction::Exit_Kind: {
+				ip = program.code.size();
 				break;
 			}
 		}

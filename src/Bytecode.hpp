@@ -22,11 +22,6 @@ namespace IS {
 	struct Pop {
 		size_t n = 0;
 	};
-	struct Cpy {
-		size_t from = 0;
-		size_t to = 0;
-		size_t n = 0;
-	};
 	struct Load {
 		size_t memory_ptr = 0;
 		size_t n = 0;
@@ -35,6 +30,13 @@ namespace IS {
 		size_t memory_ptr = 0;
 		size_t n = 0;
 	};
+	struct Call {
+		size_t f_idx = 0;
+	};
+	struct Ret {
+		size_t n = 0;
+	};
+	struct Exit {};
 	struct True  {};
 	struct False {};
 	struct Neg {};
@@ -48,7 +50,8 @@ namespace IS {
 
 	#define IS_LIST(X)\
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) \
-	X(Print) X(Push) X(Cpy) X(Pop) X(Load) X(Save) X(Alloc)
+	X(Print) X(Push) X(Pop) X(Load) X(Save) X(Alloc) X(Call) X(Ret) \
+	X(Exit)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);
@@ -60,6 +63,12 @@ namespace IS {
 			}
 			if (typecheck(Push_Kind)) {
 				printf(": %zu", Push_.n);
+			}
+			if (typecheck(Call_Kind)) {
+				printf(": f:[%zu]", Call_.f_idx);
+			}
+			if (typecheck(Ret_Kind)) {
+				printf(": %zu", Ret_.n);
 			}
 			if (typecheck(Pop_Kind)) {
 				printf(": %zu", Pop_.n);
@@ -73,9 +82,6 @@ namespace IS {
 			if (typecheck(Save_Kind)) {
 				printf(": mem:[%zu], %zu", Save_.memory_ptr, Save_.n);
 			}
-			if (typecheck(Cpy_Kind)) {
-				printf(": stack:[%zu], stack:[%zu], %zu ; from, to, n", Cpy_.from, Cpy_.to, Cpy_.n);
-			}
 			printf("\n");
 		}
 	};
@@ -84,11 +90,21 @@ namespace IS {
 struct Program {
 	std::vector<std::uint8_t>    data;
 	std::vector<IS::Instruction> code;
+	std::vector<std::vector<IS::Instruction>> functions;
+
+	std::vector<IS::Instruction>* current_function = &code;
 
 	size_t stack_ptr = 0;
 	size_t memory_stack_ptr = 0;
 
 	AST_Interpreter interpreter;
+
+	void compile_function(
+		const std::vector<AST::Node>& nodes,
+		size_t idx,
+		std::vector<IS::Instruction>& func,
+		std::string_view file
+	) noexcept;
 
 	void debug() const noexcept;
 };
@@ -101,6 +117,9 @@ extern Program compile(
 struct Bytecode_VM {
 	std::vector<std::uint8_t> stack;
 	std::vector<std::uint8_t> memory;
+
+	std::vector<size_t> call_stack;
+	std::vector<size_t> stack_frame;
 
 	size_t immediate_register = 0;
 
