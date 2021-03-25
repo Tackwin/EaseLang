@@ -843,7 +843,6 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 		var = Identifier();
 		var.Identifier_.memory_idx = alloc(types.at(type_hint).get_size());
 		var.Identifier_.type_descriptor_id = type_hint;
-		new_variable(name, var);
 	}
 
 	return new_variable(name, std::move(var));

@@ -1,5 +1,9 @@
-fib := proc (int x) -> int {
-	return fib(x - 1) + fib(x - 2);
+f := proc (real x) -> real {
+	if x < 2 {
+		return x;
+	};
+	return f(x - 1) + f(x - 2);
 };
 
-fib(5);
+y := f(30);
+print(y);
