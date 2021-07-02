@@ -38,10 +38,10 @@ namespace IS {
 		size_t n = 0;
 	};
 	struct Jmp_Rel {
-		size_t dt_ip = 0;
+		int dt_ip = 0;
 	};
 	struct If_Jmp_Rel {
-		size_t dt_ip = 0;
+		int dt_ip = 0;
 	};
 	struct Exit {};
 	struct True  {};
@@ -84,10 +84,10 @@ namespace IS {
 				printf(": %zu", Pop_.n);
 			}
 			if (typecheck(Jmp_Rel_Kind)) {
-				printf(": %zu", Jmp_Rel_.dt_ip);
+				printf(": %d", Jmp_Rel_.dt_ip);
 			}
 			if (typecheck(If_Jmp_Rel_Kind)) {
-				printf(": %zu", If_Jmp_Rel_.dt_ip);
+				printf(": %d", If_Jmp_Rel_.dt_ip);
 			}
 			if (typecheck(Alloc_Kind)) {
 				printf(": %zu", Alloc_.n);

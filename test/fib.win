@@ -5,5 +5,5 @@ f := proc (real x) -> real {
 	return f(x - 1) + f(x - 2);
 };
 
-y := f(30);
+y := f(3);
 print(y);

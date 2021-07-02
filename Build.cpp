@@ -16,6 +16,9 @@ Build build(Flags flags) noexcept {
 	// for g++ people :eyes
 	// b.compiler = "g++";
 
+
+	b.stack_size *= 64;
+
 	b.add_source_recursively("src/");
 
 	b.no_warnings_win32();

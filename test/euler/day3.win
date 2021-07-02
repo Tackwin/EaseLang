@@ -1,0 +1,30 @@
+is_prime := proc (real x) -> real {
+	for (i_ := 2; i_ * i_ < x; i_ = i_ + 1;) {
+		if x % i_ == 0 {
+			return 1;
+		}
+	}
+	return 0;
+};
+
+main := proc {
+	n := 600851475143;
+
+	sum := 0;
+	r := 0;
+	for (i := 1; i * i < n; i = i + 1;) {
+		r = n % i;
+		if r == 0 {
+			if is_prime(i) > 0 {
+				print(i);
+				sum = sum + i;
+			}
+		}
+	}
+
+	print(sum);
+};
+
+
+main();
+

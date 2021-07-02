@@ -432,7 +432,7 @@ struct AST {
 			{
 				auto line = expressions.nodes[idx]->string(file, expressions);
 				append_tab(1, line);
-				res += line + "\n";
+				res += line + ";\n";
 			}
 			
 			res += "}";

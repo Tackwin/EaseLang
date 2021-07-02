@@ -30,7 +30,11 @@ void interpret(std::string file) noexcept {
 void compile(std::string file) noexcept {
 	auto tokens = tokenize(file);
 	auto exprs = parse(tokens, file);
+	// >TODO(Tackwin): We want to add a step here. The type checker, this step will
+	// auto deduce type where necessary, type check expression and fill the ast with
+	// final type information. >Type
 
+	// So here we assume that the AST is fully typed.
 	auto prog = compile(exprs.nodes, file);
 	prog.debug();
 	
@@ -58,6 +62,6 @@ int main(int argc, char** argv) noexcept {
 
 	printf("%s\n", file.c_str());
 
-	compile(std::move(file));
+	interpret(std::move(file));
 	return 0;
 }

@@ -631,7 +631,7 @@ Value AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vi
 	auto id = any_id.cast<Identifier>();
 
 	push_scope();
-	scopes.back().fence = true;
+	// scopes.back().fence = true;
 	defer { pop_scope(); };
 
 	auto f = &types.at(id.type_descriptor_id).User_Function_Type_;

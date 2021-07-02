@@ -86,7 +86,12 @@ decl(assignement) {
 		type_hint_size = t.get_size();
 	}
 
+	emit(IS::Alloc{ type_hint_size });
+	program.memory_stack_ptr += type_hint_size;
+
 	if (node.value_idx) {
+		// >Type
+
 		type_hint = expression(nodes, *node.value_idx, program, file);
 		if (!type_hint) { // if expression return false that means that we are dealing with
 		                  // a type definition like vec2 := struct { x := 0; y := 0; };
@@ -106,22 +111,16 @@ decl(assignement) {
 					file
 				);
 			}
+			if (t.kind == AST_Interpreter::Type::User_Struct_Type_Kind) {
+				program.interpreter.type_name_to_hash[name] = t.User_Struct_Type_.unique_id;
+			}
 
-		} else {
-			type_hint_size = program.interpreter.types.at(type_hint).get_size();
-			emit(IS::Alloc{ type_hint_size });
-
-			emit(IS::Save({ program.memory_stack_ptr, type_hint_size }));
-			id.type_descriptor_id = type_hint;
+			return 0;
 		}
-
-	} else if (type_hint) {
-		emit(IS::Alloc{ type_hint_size });
 		id.type_descriptor_id = type_hint;
 	}
 
-	program.memory_stack_ptr += type_hint_size;
-
+	emit(IS::Save({ id.memory_idx, type_hint_size }));
 	program.interpreter.new_variable(name, id);
 	return 0;
 }
@@ -157,16 +156,32 @@ decl(litteral) {
 decl(list_op) {
 	auto& node = nodes[idx].Operation_List_;
 
+
+	if (node.op == AST::Operator::Assign) {
+		identifier(nodes, node.left_idx, program, file);
+		size_t before_stack = program.stack_ptr;
+		expression(nodes, node.rest_idx, program, file);
+
+		auto& ident = nodes[node.left_idx].Identifier_;
+		auto id = program.interpreter.lookup(string_view_from_view(file, ident.token.lexeme));
+		emit(IS::Save({ id.Identifier_.memory_idx, program.stack_ptr - before_stack }));
+		emit(IS::Pop{ program.stack_ptr - before_stack });
+
+		return 0;
+	}
+
 	// >TODO(Tackwin): handle a (op) b (op) c. For now we handle only a (op) b
+	size_t left_ptr = program.memory_stack_ptr;
 	expression(nodes, node.left_idx, program, file);
+	size_t right_ptr = program.stack_ptr;
 	expression(nodes, node.rest_idx, program, file);
 
 	switch (node.op) {
-	case AST::Operator::Plus:  emit(IS::Add{}); break;
-	case AST::Operator::Minus: emit(IS::Sub{}); break;
-	case AST::Operator::Star:  emit(IS::Mul{}); break;
-	case AST::Operator::Eq:    emit(IS::Eq{}); break;
-	case AST::Operator::Lt:    emit(IS::Lt{}); break;
+	case AST::Operator::Plus:   emit(IS::Add{}); break;
+	case AST::Operator::Minus:  emit(IS::Sub{}); break;
+	case AST::Operator::Star:   emit(IS::Mul{}); break;
+	case AST::Operator::Eq:     emit(IS::Eq{}); break;
+	case AST::Operator::Lt:     emit(IS::Lt{}); break;
 	}
 
 	program.stack_ptr -= sizeof(long double);
@@ -209,7 +224,7 @@ decl(if_call) {
 
 	size_t if_idx = program.current_function->size();
 	emit(IS::If_Jmp_Rel({ 2 }));
-	emit(IS::Jmp_Rel({ program.current_function->size() }));
+	emit(IS::Jmp_Rel({ 0 }));
 	auto jmp_else = program.current_function->size() - 1;
 	emit(IS::Pop({ 8 }));
 	for (size_t i = node.if_statement_idx; i; i = nodes[i]->next_statement) {
@@ -218,7 +233,7 @@ decl(if_call) {
 		expression(nodes, i, program, file);
 		emit(IS::Pop({ program.stack_ptr - stack_ptr }));
 	}
-	emit(IS::Jmp_Rel({ program.current_function->size() }));
+	emit(IS::Jmp_Rel({ 0 }));
 	auto jmp_out_idx = program.current_function->size() - 1;
 	emit(IS::Pop({ 8 }));
 
@@ -238,6 +253,33 @@ decl(if_call) {
 	return 0;
 }
 decl(for_loop) {
+	auto& node = nodes[idx].For_;
+
+	program.interpreter.push_scope();
+	defer { program.interpreter.pop_scope(); };
+
+	expression(nodes, node.init_statement_idx, program, file);
+
+	size_t top_idx = program.current_function->size();
+	expression(nodes, node.cond_statement_idx, program, file);
+	emit(IS::If_Jmp_Rel({ 3 }));
+	emit(IS::Pop({ 8 }));
+	size_t jmp_idx = program.current_function->size();
+	emit(IS::Jmp_Rel({ 0 }));
+	emit(IS::Pop({ 8 }));
+
+	for (size_t i = node.loop_statement_idx; i; i = nodes[i]->next_statement) {
+		expression(nodes, i, program, file);
+	}
+
+	expression(nodes, node.next_statement_idx, program, file);
+
+	int dt = (int)top_idx - (int)program.current_function->size();
+	emit(IS::Jmp_Rel({ dt }));
+
+	program.current_function->at(jmp_idx).Jmp_Rel_.dt_ip =
+		program.current_function->size() - jmp_idx;
+
 	return 0;
 }
 decl(while_loop) {
@@ -295,12 +337,46 @@ decl(return_call) {
 	return 0;
 }
 decl(init_list) {
-	return 0;
+	auto& node = nodes[idx].Initializer_List_;
+
+	// We create an anonymous id (We are not going to register it)
+	AST_Interpreter::Identifier new_id;
+	new_id.memory_idx = program.stack_ptr;
+
+	// If we have a type hint 'vec{0, 0}' we take that
+	if (node.type_identifier) {
+		auto type = program.interpreter.type_interpret(nodes, *node.type_identifier, file);
+
+		new_id.type_descriptor_id = type.get_unique_id();
+	} else {
+		// Else we try to deduce it
+		// >TODO(Tackwin): auto deduce type from context.
+		assert(false);
+	}
+
+	// We alloc enough size to hold the type that we got
+	size_t type_size = program.interpreter.types.at(new_id.type_descriptor_id).get_size();
+	emit(IS::Alloc{type_size});
+
+	size_t running_ptr = 0;
+
+	// we go through every expression in the init list and copy it to the allocated memory section
+	// right now we assume that every field is filled but we will change that letter. >TODO(Tackwin)
+	for (size_t i = node.expression_list_idx; i; i = nodes[i]->next_statement) {
+		auto& n = nodes[i];
+
+		size_t type_idx = expression(nodes, i, program, file);
+		size_t running_type_size = program.interpreter.types.at(type_idx).get_size();
+
+		emit(IS::Save({ new_id.memory_idx + running_ptr, running_type_size }));
+		running_ptr += running_type_size;
+	}
+
+	return new_id.type_descriptor_id;
 }
 decl(array_access) {
 	return 0;
 }
-
 
 void Program::compile_function(
 	const std::vector<AST::Node>& nodes,
@@ -384,6 +460,7 @@ extern Program compile(
 
 void Program::debug() const noexcept {
 	for (size_t i = 0; i < code.size(); ++i) {
+		printf(">% 5d ", i);
 		code[i].debug();
 		if (annotations.count(i)) printf("%-100s", annotations.at(i).c_str());
 		printf("\n");
@@ -422,7 +499,8 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 	memory_stack_frame.clear();
 	memory_stack_frame.push_back(0);
 
-	for (size_t ip = 0; ip < program.code.size(); ++ip) {
+	for (size_t ip = 0, n_max = 0; ip < program.code.size() && n_max < 100; ++ip, ++n_max) {
+		printf(">%zu\n", ip);
 		auto inst = program.code[ip];
 
 		//size_t col = 0;
