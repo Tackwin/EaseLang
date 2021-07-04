@@ -395,18 +395,18 @@ void Program::compile_function(
 	current_function = &func;
 
 	interpreter.push_scope();
-	interpreter.scopes.back().fence = false;
+	interpreter.scopes.back().fence = true;
 
 	size_t running = 0;
 	for (size_t i = node.parameter_list_idx; i; i = nodes[i]->next_statement) {
-		auto& param = nodes[i].Parameter_;
+		auto& param = nodes[i].Declaration_;
 
-		auto name = string_view_from_view(file, param.name.lexeme);
+		auto name = string_view_from_view(file, param.identifier.lexeme);
 
 		AST_Interpreter::Identifier id;
 		id.memory_idx = running;
 		id.type_descriptor_id =
-			interpreter.type_interpret(nodes, param.type_identifier, file).get_unique_id();
+			interpreter.type_interpret(nodes, param.type_expression_idx, file).get_unique_id();
 
 		running += interpreter.types.at(id.type_descriptor_id).get_size();
 

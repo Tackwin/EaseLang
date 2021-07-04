@@ -13,7 +13,7 @@ Value AST_Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view f
 	auto& node = nodes[idx];
 	switch (node.kind) {
 	case AST::Node::Identifier_Kind:          return identifier   (nodes, idx, file);
-	case AST::Node::Assignement_Kind:         return assignement  (nodes, idx, file);
+	case AST::Node::Declaration_Kind:         return declaration  (nodes, idx, file);
 	case AST::Node::Litteral_Kind:            return litteral     (nodes, idx, file);
 	case AST::Node::Operation_List_Kind:      return list_op      (nodes, idx, file);
 	case AST::Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, file);
@@ -566,7 +566,7 @@ Type AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view f
 		auto& def = nodes[idx].Assignement_;
 
 		auto name = string_view_from_view(file, def.identifier.lexeme);
-		auto member = assignement(nodes, idx, file);
+		auto member = declaration(nodes, idx, file);
 
 		desc.name_to_idx[name] = desc.member_types.size();
 		desc.member_types  .push_back(member.Identifier_.type_descriptor_id);
@@ -593,11 +593,11 @@ Type AST_Interpreter::function(AST_Nodes nodes, size_t idx, std::string_view fil
 	f.is_method = node.is_method;
 
 	for (size_t idx = node.parameter_list_idx; idx; idx = nodes[idx]->next_statement) {
-		auto& param = nodes[idx].Parameter_;
+		auto& param = nodes[idx].Declaration_;
 
-		auto type = type_ident(nodes, param.type_identifier, file);
+		auto type = type_ident(nodes, param.type_expression_idx, file);
 		f.parameter_type.push_back(type.get_unique_id());
-		f.parameter_name.push_back(string_view_from_view(file, param.name.lexeme));
+		f.parameter_name.push_back(string_view_from_view(file, param.identifier.lexeme));
 	}
 
 	for (size_t idx = node.return_list_idx; idx; idx = nodes[idx]->next_statement) {
@@ -625,13 +625,14 @@ Value AST_Interpreter::function_call(AST_Nodes nodes, size_t idx, std::string_vi
 	}
 
 	auto any_id = interpret(nodes, node.identifier_idx, file);
+	auto name = string_from_view(file, nodes[node.identifier_idx].Identifier_.token.lexeme);
 	if (!any_id.typecheck(Value::Identifier_Kind)) {
 		return any_id.cast<Builtin>().f(arguments);
 	}
 	auto id = any_id.cast<Identifier>();
 
 	push_scope();
-	// scopes.back().fence = true;
+	scopes.back().fence = true;
 	defer { pop_scope(); };
 
 	auto f = &types.at(id.type_descriptor_id).User_Function_Type_;
@@ -752,13 +753,40 @@ Type AST_Interpreter::type_ident(
 			underlying.get_unique_id(), (size_t)std::roundl(size.Real_.x)
 		);
 	}
+	if (node.is_proc) {
+		Function_Signature sig;
+		size_t type_hash = 0;
+		for (
+			size_t idx = node.parameter_type_list_idx;
+			idx;
+			idx = nodes[idx]->next_statement
+		) {
+			auto t = type_ident(nodes, idx, file).get_unique_id();
+			sig.parameter_types.push_back(t);
+			type_hash = hash_combine(type_hash, t);
+		}
+		type_hash = hash_combine(type_hash, Function_Signature::Hash_Return_Separator);
+		for (
+			size_t idx = node.return_type_list_idx;
+			idx;
+			idx = nodes[idx]->next_statement
+		) {
+			auto t = type_ident(nodes, idx, file).get_unique_id();
+			sig.return_types.push_back(t);
+			type_hash = hash_combine(type_hash, t);
+		}
+		sig.unique_id = type_hash;
+
+		types[sig.unique_id] = sig;
+		return types[sig.unique_id];
+	}
 
 	return type_lookup(string_view_from_view(file, node.identifier.lexeme));
 }
 
 
-Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
-	auto& node = nodes[idx].Assignement_;
+Value AST_Interpreter::declaration(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+	auto& node = nodes[idx].Declaration_;
 	auto name = string_view_from_view(file, node.identifier.lexeme);
 
 	if (exist_lookup(name)) {
@@ -770,15 +798,15 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 	size_t type_hint = 0;
 
 	// >TODO(Tackwin): handle type info.
-	if (node.type_identifier) {
-		auto t = type_interpret(nodes, *node.type_identifier, file);
+	if (node.type_expression_idx) {
+		auto t = type_interpret(nodes, node.type_expression_idx, file);
 		type_hint = t.get_unique_id();
 	}
 
-	if (node.value_idx) {
-		auto x = interpret(nodes, *node.value_idx, file);
+	if (node.value_expression_idx) {
+		auto x = interpret(nodes, node.value_expression_idx, file);
 		if (x.typecheck(Value::None_Kind)) { // if we are defining a type
-			auto t = type_interpret(nodes, *node.value_idx, file);
+			auto t = type_interpret(nodes, node.value_expression_idx, file);
 
 			if (t.typecheck(Type::User_Function_Type_Kind)) {
 				var = Identifier();
@@ -799,7 +827,7 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 			}
 		} else { // if we are dfining a value
 
-			if (node.type_identifier) {
+			if (node.type_expression_idx) {
 				auto type = types.at(type_hint);
 
 				// special case for things like `x : int[10] = 5;`
@@ -808,7 +836,7 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 					auto& underlying = types.at(type.Array_View_Type_.user_type_descriptor_idx);
 					if (underlying.get_unique_id() != value_type.get_unique_id()) {
 						println(
-							"Mismatch type in assignement (L %zu) %s != %s.",
+							"Mismatch type in declaration (L %zu) %s != %s.",
 							node.identifier.line,
 							type.name(),
 							value_type.name()
@@ -826,7 +854,7 @@ Value AST_Interpreter::assignement(AST_Nodes nodes, size_t idx, std::string_view
 				} else {
 					if (type.get_unique_id() != get_type_id(x)) {
 						println(
-							"Mismatch type in assignement (L %zu) %s != %s.",
+							"Mismatch type in declaration (L %zu) %s != %s.",
 							node.identifier.line,
 							type.name(),
 							types.at(get_type_id(x)).name()

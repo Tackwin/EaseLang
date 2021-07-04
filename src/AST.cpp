@@ -158,21 +158,6 @@ struct Parser_State {
 		ast_return;
 	};
 
-	size_t parameter_list() noexcept {
-		AST::Parameter x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
-
-		x.type_identifier = type_identifier();
-		if (!x.type_identifier) return 0;
-
-		if (!type_is(Token::Type::Identifier)) return 0;
-		x.name = tokens[i++];
-
-		ast_return;
-	};
-
 	size_t function_definition() noexcept {
 		AST::Function_Definition x;
 		x.scope = current_scope;
@@ -189,9 +174,9 @@ struct Parser_State {
 
 
 			if (!type_is(Token::Type::Close_Paran))
-				x.parameter_list_idx = idx = parameter_list();
+				x.parameter_list_idx = idx = declaration();
 			while (type_is(Token::Type::Comma) && i++)
-				idx = exprs.nodes[idx]->next_statement = parameter_list();
+				idx = exprs.nodes[idx]->next_statement = declaration();
 
 			if (!type_is(Token::Type::Close_Paran)) return 0;
 			i++;
@@ -307,13 +292,13 @@ struct Parser_State {
 		// if (!type_is(Token::Type::Semicolon)) return 0;
 		// i++;
 
-		x.cond_statement_idx = statement();
+		x.cond_statement_idx = expression();
 		if (!x.cond_statement_idx) return 0;
 
-		// if (!type_is(Token::Type::Semicolon)) return 0;
-		// i++;
+		if (!type_is(Token::Type::Semicolon)) return 0;
+		i++;
 
-		x.next_statement_idx = statement();
+		x.next_statement_idx = expression();
 		if (!x.next_statement_idx) return 0;
 
 		if (type_is(Token::Type::Close_Paran)) i++;
@@ -430,8 +415,8 @@ struct Parser_State {
 
 		size_t idx = 0;
 		while (!type_is(Token::Type::Close_Brace)) {
-			if (!idx) x.struct_line_idx = idx = assignement();
-			else      idx = exprs.nodes[idx]->next_statement = assignement();
+			if (!idx) x.struct_line_idx = idx = declaration();
+			else      idx = exprs.nodes[idx]->next_statement = declaration();
 			if (!idx) break;
 			
 			if (!type_is(Token::Type::Semicolon)) return 0;
@@ -444,8 +429,8 @@ struct Parser_State {
 		ast_return;
 	}
 
-	size_t assignement() noexcept {
-		AST::Assignement x;
+	size_t declaration() noexcept {
+		AST::Declaration x;
 		x.scope = current_scope;
 		x.depth = current_depth++;
 		defer { current_depth--; };
@@ -453,21 +438,17 @@ struct Parser_State {
 		x.identifier = tokens[i++];
 		if (!type_is(Token::Type::Colon)) return 0;
 		i++;
-		if (type_is(Token::Type::Identifier)) {
-			x.type_identifier = type_identifier();
-			if (!x.type_identifier) return 0;
-		}
+		x.type_expression_idx = type_identifier(); // optional
 		// If there is no identifier AND no equal (meaning value) then we just have something like
 		// x:; which we don't allow.
-		else if (!type_is(Token::Type::Equal)) return 0;
+		if (!x.type_expression_idx && !type_is(Token::Type::Equal)) return 0;
 
 		if (type_is(Token::Type::Equal)) {
 			i++;
 			auto literral_idx = expression();
 			if (!literral_idx) return 0;
-			x.value_idx = literral_idx;
+			x.value_expression_idx = literral_idx;
 		}
-
 
 		ast_return;
 	};
@@ -672,9 +653,45 @@ struct Parser_State {
 		x.depth = current_depth++;
 		defer { current_depth = prev_depth; };
 
-		// always start with an identifier.
-		if (!type_is(Token::Type::Identifier)) return 0;
-		x.identifier = tokens[i++];
+		if (type_is(Token::Type::Proc)) {
+			x.is_proc = true;
+			i++;
+
+			if (!type_is(Token::Type::Open_Paran)) return 0;
+			i++;
+
+			size_t& idx = x.parameter_type_list_idx;
+			while (!type_is(Token::Type::Close_Paran)) {
+				if (type_is(Token::Type::Comma)) i++;
+				idx = type_identifier();
+				if (!idx) return 0;
+				idx = exprs.nodes[idx]->next_statement;
+			}
+			if (!type_is(Token::Type::Close_Paran)) return 0;
+			i++;
+
+			if (type_is(Token::Type::Arrow)) {
+				i++;
+
+				if (type_is(Token::Type::Open_Paran)) {
+					size_t& idx = x.return_type_list_idx;
+					while (!type_is(Token::Type::Close_Paran)) {
+						if (type_is(Token::Type::Comma)) i++;
+						idx = type_identifier();
+						if (!idx) return 0;
+						idx = exprs.nodes[idx]->next_statement;
+					}
+					if (!type_is(Token::Type::Close_Paran)) return 0;
+					i++;
+				} else {
+					x.return_type_list_idx = type_identifier();
+				}
+			}
+		} else {
+			if (!type_is(Token::Type::Identifier)) return 0;
+			x.identifier = tokens[i++];
+		}
+
 
 		// then we can have arbitrary nested combinations of const, [], and *
 		// every time we have a *, it means there is an indirection. We push our current
@@ -736,7 +753,7 @@ struct Parser_State {
 
 	size_t statement() noexcept {
 		if (type_is(Token::Type::Identifier) && next_type_is(Token::Type::Colon)) {
-			auto idx = assignement();
+			auto idx = declaration();
 			if (!type_is(Token::Type::Semicolon)) return 0;
 			i++;
 			return idx;

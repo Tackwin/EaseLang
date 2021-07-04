@@ -1324,7 +1324,7 @@ NS::Commands compile_command_incremetal_check(const NS::Build& b) noexcept {
 	return commands;
 }
 
-void execute(const NS::Build& build, const NS::Commands& c) noexcept {
+bool execute(const NS::Build& build, const NS::Commands& c) noexcept {
 	#ifndef NO_THREAD
 	std::vector<std::thread> threads;
 	std::atomic<bool> stop_flag = false;
@@ -1383,6 +1383,7 @@ void execute(const NS::Build& build, const NS::Commands& c) noexcept {
 		printf("There was an error in the build. There should be more informations above.");
 	}
 #endif
+	return !stop_flag;
 }
 
 void add_install_path(NS::Build& b) noexcept {
@@ -1443,7 +1444,8 @@ void handle_build(Build& b, NS::States& new_states) noexcept {
 		std::filesystem::create_directory(b.flags.get_build_path());
 		std::filesystem::create_directory(b.flags.get_temp_path());
 
-		for (auto& x : b.pre_compile) execute(b, x);
+		bool successful = true;
+		for (auto& x : b.pre_compile) successful &= execute(b, x);
 
 		::NS::Commands c;
 
@@ -1457,19 +1459,19 @@ void handle_build(Build& b, NS::States& new_states) noexcept {
 		if (!b.flags.link_only) {
 			if (b.flags.assembly) {
 				c = compile_assembly({}, b);
-				execute(b, c);
+				successful &= execute(b, c);
 			}
 
 			c = compile_command_incremetal_check(b);
-			execute(b, c);
+			successful &= execute(b, c);
 			set_files_hashes(b.flags.get_temp_path(), new_state);
 			if (!b.flags.scratch)
 				b.current_state = NS::Build_State::get_unchanged(b.current_state, new_state);
 
 			c = compile_command_object(b.current_state, b);
 
-			execute(b, c);
-			for (auto& x : b.post_compile) execute(b, x);
+			successful &= execute(b, c);
+			for (auto& x : b.post_compile) successful &= execute(b, x);
 		}
 		if (b.target == NS::Build::Target::Static) {
 			c = compile_command_link_static(b);
@@ -1481,11 +1483,11 @@ void handle_build(Build& b, NS::States& new_states) noexcept {
 			b.to_install.push_back(*x.output);
 		}
 
-		for (auto& x : b.pre_link) execute(b, x);
-		execute(b, c);
-		for (auto& x : b.post_link) execute(b, x);
+		for (auto& x : b.pre_link) successful &= execute(b, x);
+		successful &= execute(b, c);
+		for (auto& x : b.post_link) successful &= execute(b, x);
 
-		if (b.target == NS::Build::Target::Exe && b.flags.run_after_compilation) {
+		if (b.target == NS::Build::Target::Exe && b.flags.run_after_compilation && successful) {
 			std::string run = NS::details::get_output_path(b).generic_string();
 			for (auto& x : b.flags.rest_args) run += " " + x;
 			if (!Env::Win32) run = "./" + run;
@@ -1703,7 +1705,7 @@ std::string NS::details::get_cli_flag(
 	case NS::Cli_Opts::Time_Trace :
 		X(std::string("-ftime-trace"), "");
 	case NS::Cli_Opts::Stack_Size :
-		X(std::string("-Wl,/STACK:") + param.data(), "");
+		X(std::string("-Wl,-STACK:") + param.data(), "");
 	case NS::Cli_Opts::Arch_32 :
 		X(std::string("-m32"), "");
 	case NS::Cli_Opts::Native :

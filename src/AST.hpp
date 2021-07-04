@@ -155,11 +155,15 @@ struct AST {
 		std::optional<size_t> array_size = std::nullopt;
 		std::optional<size_t> pointer_to = std::nullopt;
 
+		bool is_proc = false;
+		size_t parameter_type_list_idx = 0;
+		size_t return_type_list_idx = 0;
+
 		virtual std::string string(
 			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "";
-			
+
 			if (pointer_to) {
 				res = expressions.nodes[*pointer_to]->string(file, expressions);
 				res += "*";
@@ -168,6 +172,33 @@ struct AST {
 				res += "[";
 				res += expressions.nodes[*array_size]->string(file, expressions);
 				res += "]";
+			} else if (is_proc) {
+				res = "proc";
+				char sep = '(';
+				for (
+					size_t idx = parameter_type_list_idx;
+					idx;
+					idx = expressions.nodes[idx]->next_statement
+				) {
+					res += sep;
+					res += expressions.nodes[idx]->string(file, expressions);
+					sep = ',';
+				}
+				res += ')';
+				if (return_type_list_idx) {
+					res += " -> ";
+				}
+				sep = '(';
+				for (
+					size_t idx = return_type_list_idx;
+					idx;
+					idx = expressions.nodes[idx]->next_statement
+				) {
+					res += sep;
+					res += expressions.nodes[idx]->string(file, expressions);
+					sep = ',';
+				}
+				res += ')';
 			} else {
 				res = string_from_view(file, identifier.lexeme);
 			}
@@ -277,6 +308,31 @@ struct AST {
 		}
 	};
 
+	struct Declaration : Statement {
+		Token identifier;
+		size_t type_expression_idx = 0;
+		size_t value_expression_idx = 0;
+
+		virtual  std::string  string(
+			std::string_view file, const AST& expressions
+		) const noexcept override {
+			std::string res;
+
+			res += string_from_view(file, identifier.lexeme);
+			res += " :";
+			if (type_expression_idx) {
+				res += " ";
+				res += expressions.nodes[type_expression_idx]->string(file, expressions);
+				res += " ";
+			}
+			if (value_expression_idx) {
+				res += "= ";
+				res += expressions.nodes[value_expression_idx]->string(file, expressions);
+			}
+			return res;
+		}
+	};
+
 	struct Function_Definition : Statement {
 		size_t parameter_list_idx = 0;
 		size_t return_list_idx = 0;
@@ -342,20 +398,6 @@ struct AST {
 			std::string_view file, const AST& expressions
 		) const noexcept override {
 			return expressions.nodes[value_idx]->string(file, expressions);
-		}
-	};
-
-	struct Parameter : Statement {
-		size_t type_identifier;
-		Token name;
-
-		// Gather all the keyword lol
-		virtual std::string string(
-			std::string_view file, const AST& expressions
-		) const noexcept override {
-			return 
-				expressions.nodes[type_identifier]->string(file, expressions) + " " +
-				string_from_view(file, name.lexeme);
 		}
 	};
 
@@ -467,12 +509,12 @@ struct AST {
 	};
 
 	#define LIST_AST_TYPE(X)\
-		X(Parameter          )\
 		X(Argument           )\
 		X(Group_Expression   )\
 		X(Return_Parameter   )\
 		X(Assignement        )\
 		X(Identifier         )\
+		X(Declaration        )\
 		X(Litteral           )\
 		X(Array_Access       )\
 		X(Function_Call      )\

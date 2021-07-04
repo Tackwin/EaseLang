@@ -62,8 +62,13 @@ struct AST_Interpreter {
 		size_t user_type_descriptor_idx = 0;
 		size_t length = 0;
 	};
+	struct Function_Signature {
+		static constexpr size_t Hash_Return_Separator = 11582/*(size_t)'->'*/;
+		size_t unique_id = 0;
+		std::vector<size_t> parameter_types;
+		std::vector<size_t> return_types;
+	};
 	struct User_Function_Type {
-		static constexpr size_t return_separator_id = 0;
 		size_t unique_id = 0;
 		size_t start_idx = 0;
 		size_t byte_size = 8;
@@ -85,7 +90,8 @@ struct AST_Interpreter {
 
 	#define LIST_LANG_TYPES(X)\
 		X(Nat_Type) X(Real_Type) X(Int_Type) X(User_Struct_Type) X(User_Function_Type)\
-		X(Pointer_Type) X(Array_View_Type) X(Bool_Type) X(Byte_Type) X(Void_Type)
+		X(Pointer_Type) X(Array_View_Type) X(Bool_Type) X(Byte_Type) X(Void_Type)\
+		X(Function_Signature)
 
 	struct Type {
 		sum_type(Type, LIST_LANG_TYPES);
@@ -142,7 +148,7 @@ struct AST_Interpreter {
 	Value factor       (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value group_expr   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value identifier   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
-	Value assignement  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value declaration  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value if_call      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value for_loop     (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value while_loop   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;

@@ -1,15 +1,16 @@
 main := proc {
-	fib := proc (int x) -> int {
+	fib := proc (x : int, fib : proc(int) -> int) -> int {
 		if x < 2 {
 			return x;
 		}
-		return fib(x - 1) + fib(x - 2);
+		return fib(x - 1, fib) + fib(x - 2, fib);
 	};
 
 	sum := 0;
-	f := 0;
-	for (i := 0; fib(i) < 4000000; i = i + 1;) {
-		f = fib(i);
+	f := fib(0, fib);
+	for (i := 1; f < 4000000; i = i + 1) {
+		print(i);
+		f = fib(i, fib);
 		if (f % 2 == 0) {
 			sum = sum + f;
 		}
