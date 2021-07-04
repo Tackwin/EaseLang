@@ -1023,6 +1023,18 @@ void AST_Interpreter::push_builtin() noexcept {
 	};
 	builtins["sleep"] = sleep;
 
+	Builtin int_;
+	int_.f = [&] (std::vector<Identifier> values) -> Value {
+		if (values.size() != 1) return nullptr;
+
+		auto v = at(values.front());
+		switch (v.kind) {
+			case Value::Real_Kind: return Real{(long double)(size_t)v.Real_.x};
+			default: return nullptr;
+		}
+	};
+	builtins["int"] = int_;
+
 
 	type_name_to_hash["nat"] = Nat_Type::unique_id;
 	type_name_to_hash["int"] = Int_Type::unique_id;

@@ -1,0 +1,30 @@
+main := proc {
+	is_palindrome := proc(x: real) -> bool {
+		x_ := x;
+		y := 0;
+		m := 0;
+		while x > 0 {
+			m = x % 10;
+			y = y * 10;
+			y = y + m;
+			x = int(x / 10);
+		}
+		return x_ == y;
+	};
+
+	best := 0;
+	m := 0;
+	for (i := 0; i < 1000; i = i + 1) {
+		for (j := i; j < 1000; j = j + 1) {
+			m = i * j;
+			if (m > best) {
+				if is_palindrome(m) {
+					best = m;
+				}
+			}
+		}
+	}
+	print(best);
+};
+
+main();

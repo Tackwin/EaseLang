@@ -35,8 +35,9 @@ struct AST_Interpreter {
 	struct Return_Call {
 		std::vector<Identifier> values;
 	};
+	struct Value;
 	struct Builtin {
-		std::function<Identifier(std::vector<Identifier>)> f;
+		std::function<Value(std::vector<Identifier>)> f;
 	};
 
 	#define LIST_LANG_VALUE(X)\
