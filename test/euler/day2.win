@@ -8,7 +8,7 @@ main := proc {
 
 	sum := 0;
 	f := fib(0, fib);
-	for (i := 1; f < 4000000; i = i + 1) {
+	for (i := 1; f < 4000000; i++) {
 		print(i);
 		f = fib(i, fib);
 		if (f % 2 == 0) {

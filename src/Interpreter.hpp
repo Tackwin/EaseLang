@@ -66,6 +66,7 @@ struct AST_Interpreter {
 	struct Function_Signature {
 		static constexpr size_t Hash_Return_Separator = 11582/*(size_t)'->'*/;
 		size_t unique_id = 0;
+		size_t byte_size = 8;
 		std::vector<size_t> parameter_types;
 		std::vector<size_t> return_types;
 	};
@@ -109,21 +110,23 @@ struct AST_Interpreter {
 			case Array_View_Type_Kind   : return sizeof(size_t) + sizeof(size_t);
 			case User_Struct_Type_Kind  : return User_Struct_Type_.byte_size;
 			case User_Function_Type_Kind: return User_Function_Type_.byte_size;
+			case Function_Signature_Kind: return Function_Signature_.byte_size;
 			default: return 0;
 			}
 		}
 
 		size_t get_unique_id() noexcept {
 			switch (kind) {
-			case Void_Type_Kind       : return Void_Type::unique_id;
-			case Bool_Type_Kind       : return Bool_Type::unique_id;
-			case Byte_Type_Kind       : return Byte_Type::unique_id;
-			case Nat_Type_Kind        : return Nat_Type::unique_id;
-			case Real_Type_Kind       : return Real_Type::unique_id;
-			case Int_Type_Kind        : return Int_Type::unique_id;
-			case Pointer_Type_Kind    : return Pointer_Type_.unique_id;
-			case Array_View_Type_Kind : return Array_View_Type_.unique_id;
-			case User_Struct_Type_Kind: return User_Struct_Type_.unique_id;
+			case Void_Type_Kind         : return Void_Type::unique_id;
+			case Bool_Type_Kind         : return Bool_Type::unique_id;
+			case Byte_Type_Kind         : return Byte_Type::unique_id;
+			case Nat_Type_Kind          : return Nat_Type::unique_id;
+			case Real_Type_Kind         : return Real_Type::unique_id;
+			case Int_Type_Kind          : return Int_Type::unique_id;
+			case Pointer_Type_Kind      : return Pointer_Type_.unique_id;
+			case Array_View_Type_Kind   : return Array_View_Type_.unique_id;
+			case User_Struct_Type_Kind  : return User_Struct_Type_.unique_id;
+			case Function_Signature_Kind: return Function_Signature_.unique_id;
 			default: return 0;
 			}
 		}

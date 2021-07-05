@@ -26,12 +26,19 @@ namespace IS {
 		size_t memory_ptr = 0;
 		size_t n = 0;
 	};
+	struct Loadf {
+		size_t memory_ptr = 0;
+		size_t n = 0;
+	};
 	struct Save {
 		size_t memory_ptr = 0;
 		size_t n = 0;
 	};
 	struct Call {
 		size_t f_idx = 0;
+		size_t n = 0;
+	};
+	struct Call_At {
 		size_t n = 0;
 	};
 	struct Ret {
@@ -48,12 +55,14 @@ namespace IS {
 	struct False {};
 	struct Neg {};
 	struct Not {};
+	struct Inc {};
 	struct Add {};
 	struct Sub {};
 	struct Eq {};
 	struct Lt {};
 	struct Div {};
 	struct Mul {};
+	struct Mod {};
 	struct Print {};
 	struct Sleep {};
 
@@ -61,7 +70,7 @@ namespace IS {
 	#define IS_LIST(X)\
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) \
 	X(Print) X(Push) X(Pop) X(Load) X(Save) X(Alloc) X(Call) X(Ret) \
-	X(Exit) X(Sleep) X(Eq) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel)
+	X(Exit) X(Sleep) X(Eq) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At) X(Loadf)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);

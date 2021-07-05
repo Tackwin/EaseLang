@@ -62,6 +62,13 @@ int main(int argc, char** argv) noexcept {
 
 	printf("%s\n", file.c_str());
 
-	interpret(std::move(file));
+	if (argc < 3) {
+		interpret(std::move(file));
+		return 0;
+	}
+	auto mode = argv[2];
+	if (strcmp(mode, "compile") == 0)   compile(std::move(file));
+	if (strcmp(mode, "interpret") == 0) interpret(std::move(file));
+
 	return 0;
 }

@@ -660,12 +660,13 @@ struct Parser_State {
 			if (!type_is(Token::Type::Open_Paran)) return 0;
 			i++;
 
-			size_t& idx = x.parameter_type_list_idx;
+			size_t idx = 0;
 			while (!type_is(Token::Type::Close_Paran)) {
 				if (type_is(Token::Type::Comma)) i++;
-				idx = type_identifier();
+				if (!idx) idx = x.parameter_type_list_idx = type_identifier();
+				else      idx = exprs.nodes[idx]->next_statement = type_identifier();
+
 				if (!idx) return 0;
-				idx = exprs.nodes[idx]->next_statement;
 			}
 			if (!type_is(Token::Type::Close_Paran)) return 0;
 			i++;
@@ -674,12 +675,12 @@ struct Parser_State {
 				i++;
 
 				if (type_is(Token::Type::Open_Paran)) {
-					size_t& idx = x.return_type_list_idx;
+					size_t idx = 0;
 					while (!type_is(Token::Type::Close_Paran)) {
 						if (type_is(Token::Type::Comma)) i++;
-						idx = type_identifier();
+						if (!idx) idx = x.return_type_list_idx = type_identifier();
+						else      idx = exprs.nodes[idx]->next_statement = type_identifier();
 						if (!idx) return 0;
-						idx = exprs.nodes[idx]->next_statement;
 					}
 					if (!type_is(Token::Type::Close_Paran)) return 0;
 					i++;

@@ -563,7 +563,7 @@ Type AST_Interpreter::struct_def(AST_Nodes nodes, size_t idx, std::string_view f
 
 	size_t running_offset = 0;
 	for (size_t idx = node.struct_line_idx; idx; idx = nodes[idx]->next_statement) {
-		auto& def = nodes[idx].Assignement_;
+		auto& def = nodes[idx].Declaration_;
 
 		auto name = string_view_from_view(file, def.identifier.lexeme);
 		auto member = declaration(nodes, idx, file);

@@ -30,26 +30,6 @@ struct AST {
 		}
 	};
 
-	struct Assignement : Statement {
-		Token identifier;
-		std::optional<size_t> type_identifier = std::nullopt;
-		std::optional<size_t> value_idx = std::nullopt;
-
-		// Gather all the keyword lol
-		virtual std::string string(
-			std::string_view file, const AST& expressions
-		) const noexcept override {
-			std::string res;
-			res += string_from_view(file, identifier.lexeme) + " :";
-			if (type_identifier) {
-				res += " " + expressions.nodes[*type_identifier]->string(file, expressions) + " ";
-			}
-			if (value_idx) {
-				res += "= " + expressions.nodes[*value_idx]->string(file, expressions);
-			}
-			return res;
-		}
-	};
 	enum class Operator {
 		Null = 0,
 		Minus,
@@ -512,7 +492,6 @@ struct AST {
 		X(Argument           )\
 		X(Group_Expression   )\
 		X(Return_Parameter   )\
-		X(Assignement        )\
 		X(Identifier         )\
 		X(Declaration        )\
 		X(Litteral           )\

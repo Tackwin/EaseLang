@@ -1,8 +1,8 @@
 main := proc {
-	n := 1000;
+	n : real = 1000;
 
-	sum := 0;
-	for (i := 0; i < n; i = i + 1) {
+	sum : real = 0;
+	for (i : real = 0; i < n; i++) {
 		if (i % 3 == 0) {
 			sum = sum + i;
 		}
