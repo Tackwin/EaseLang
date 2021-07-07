@@ -127,6 +127,7 @@ struct AST_Interpreter {
 			case Array_View_Type_Kind   : return Array_View_Type_.unique_id;
 			case User_Struct_Type_Kind  : return User_Struct_Type_.unique_id;
 			case Function_Signature_Kind: return Function_Signature_.unique_id;
+			case User_Function_Type_Kind: return User_Function_Type_.unique_id;
 			default: return 0;
 			}
 		}

@@ -8,8 +8,10 @@ const std::vector<AST::Node>& nodes, size_t idx, Program& program, std::string_v
 ) noexcept
 
 void emit(Program& program, IS::Instruction x) {
-	program.annotations[program.current_function->size()] = "";
-	program.current_function->push_back(x);
+	auto* f = &program.code;
+	if (program.current_function_idx) f = &program.functions[program.current_function_idx - 1];
+	program.annotations[f->size()] = "";
+	f->push_back(x);
 }
 
 size_t alloc_constant(Program& prog, long double constant) noexcept {
@@ -74,11 +76,7 @@ decl(identifier) {
 	auto id = program.interpreter.lookup(string_view_from_view(file, node.token.lexeme));
 
 	auto& type = program.interpreter.types.at(id.Identifier_.type_descriptor_id);
-	if (type.kind == AST_Interpreter::Type::Function_Signature_Kind) {
-		emit(program, IS::Loadf({ id.Identifier_.memory_idx, type.get_size() }));
-	} else {
-		emit(program, IS::Load({ id.Identifier_.memory_idx, type.get_size() }));
-	}
+	emit(program, IS::Load({ id.Identifier_.memory_idx, type.get_size() }));
 
 	program.stack_ptr += type.get_size();
 
@@ -100,10 +98,10 @@ decl(declaration) {
 		auto t = program.interpreter.type_interpret(nodes, node.type_expression_idx, file);
 		type_hint = t.get_unique_id();
 		type_hint_size = t.get_size();
+		emit(program, IS::Alloc{ type_hint_size });
+		program.memory_stack_ptr += type_hint_size;
 	}
 
-	emit(program, IS::Alloc{ type_hint_size });
-	program.memory_stack_ptr += type_hint_size;
 
 	if (node.value_expression_idx) {
 		// >Type
@@ -113,25 +111,37 @@ decl(declaration) {
 		                  // a type definition like vec2 := struct { x := 0; y := 0; };
 
 			auto t = program.interpreter.type_interpret(nodes, node.value_expression_idx, file);
+			type_hint = t.get_unique_id();
+			type_hint_size = t.get_size();
 
 			if (t.typecheck(AST_Interpreter::Type::User_Function_Type_Kind)) {
-				id.memory_idx = program.functions.size();
+				id.memory_idx = program.memory_stack_ptr;
 				id.type_descriptor_id = t.User_Function_Type_.unique_id;
 
+				emit(program, IS::Alloc{ t.get_size() });
+				program.memory_stack_ptr += t.get_size();
+				emit(program, IS::Constantf{ program.functions.size() });
+				program.stack_ptr += t.get_size();
+				emit(program, IS::Save({ id.memory_idx, t.get_size() }));
 				program.interpreter.new_variable(name, id);
+
+				size_t old_f = program.current_function_idx;
 				program.functions.emplace_back();
-				program.compile_function(
-					nodes,
-					node.value_expression_idx,
-					program.functions.back(),
-					file
-				);
+				program.current_function_idx = program.functions.size();
+				program.compile_function(nodes, node.value_expression_idx, file);
+				program.current_function_idx = old_f;
 			}
 			if (t.kind == AST_Interpreter::Type::User_Struct_Type_Kind) {
 				program.interpreter.type_name_to_hash[name] = t.User_Struct_Type_.unique_id;
 			}
 
 			return 0;
+		}
+
+		if (!node.type_expression_idx) {
+			type_hint_size = program.interpreter.types.at(type_hint).get_size();
+			emit(program, IS::Alloc{ type_hint_size });
+			program.memory_stack_ptr += type_hint_size;
 		}
 		id.type_descriptor_id = type_hint;
 	}
@@ -195,8 +205,12 @@ decl(list_op) {
 	case AST::Operator::Minus:  emit(program, IS::Sub{}); break;
 	case AST::Operator::Star:   emit(program, IS::Mul{}); break;
 	case AST::Operator::Eq:     emit(program, IS::Eq{}); break;
+	case AST::Operator::Neq:     emit(program, IS::Neq{}); break;
 	case AST::Operator::Lt:     emit(program, IS::Lt{}); break;
+	case AST::Operator::Gt:     emit(program, IS::Gt{}); break;
 	case AST::Operator::Mod:     emit(program, IS::Mod{}); break;
+	case AST::Operator::Div:     emit(program, IS::Div{}); break;
+	default: assert("Not supported"); break;
 	}
 
 	program.stack_ptr -= sizeof(long double);
@@ -250,27 +264,27 @@ decl(if_call) {
 	program.interpreter.push_scope();
 	defer { program.interpreter.pop_scope(); };
 
-	size_t if_idx = program.current_function->size();
+	size_t if_idx = program.get_current_function()->size();
 	emit(program, IS::If_Jmp_Rel({ 2 }));
 	emit(program, IS::Jmp_Rel({ 0 }));
-	auto jmp_else = program.current_function->size() - 1;
+	auto jmp_else = program.get_current_function()->size() - 1;
 	emit(program, IS::Pop({ 8 }));
 	for (size_t i = node.if_statement_idx; i; i = nodes[i]->next_statement) {
 		statement(nodes, i, program, file);
 	}
 	emit(program, IS::Jmp_Rel({ 0 }));
-	auto jmp_out_idx = program.current_function->size() - 1;
+	auto jmp_out_idx = program.get_current_function()->size() - 1;
 	emit(program, IS::Pop({ 8 }));
 
-	auto jmp_else_offset = program.current_function->size() - jmp_else;
-	program.current_function->at(jmp_else).Jmp_Rel_.dt_ip = jmp_else_offset;
+	auto jmp_else_offset = program.get_current_function()->size() - jmp_else;
+	program.get_current_function()->at(jmp_else).Jmp_Rel_.dt_ip = jmp_else_offset;
 
 	for (size_t i = node.else_statement_idx; i; i = nodes[i]->next_statement) {
 		statement(nodes, i, program, file);
 	}
 
-	auto jmp_out_offset = program.current_function->size() - jmp_out_idx;
-	program.current_function->at(jmp_out_idx).If_Jmp_Rel_.dt_ip = jmp_out_offset;
+	auto jmp_out_offset = program.get_current_function()->size() - jmp_out_idx;
+	program.get_current_function()->at(jmp_out_idx).If_Jmp_Rel_.dt_ip = jmp_out_offset;
 
 	return 0;
 }
@@ -286,12 +300,12 @@ decl(for_loop) {
 
 	statement(nodes, node.init_statement_idx, program, file);
 
-	size_t top_idx = program.current_function->size();
+	size_t top_idx = program.get_current_function()->size();
 	expression(nodes, node.cond_statement_idx, program, file);
 	program.stack_ptr -= 8;
 	emit(program, IS::If_Jmp_Rel({ 3 }));
 	emit(program, IS::Pop({ 8 }));
-	size_t jmp_idx = program.current_function->size();
+	size_t jmp_idx = program.get_current_function()->size();
 	emit(program, IS::Jmp_Rel({ 0 }));
 	emit(program, IS::Pop({ 8 }));
 
@@ -301,11 +315,11 @@ decl(for_loop) {
 
 	statement(nodes, node.next_statement_idx, program, file);
 
-	int dt = (int)top_idx - (int)program.current_function->size();
+	int dt = (int)top_idx - (int)program.get_current_function()->size();
 	emit(program, IS::Jmp_Rel({ dt }));
 
-	program.current_function->at(jmp_idx).Jmp_Rel_.dt_ip =
-		program.current_function->size() - jmp_idx;
+	program.get_current_function()->at(jmp_idx).Jmp_Rel_.dt_ip =
+		program.get_current_function()->size() - jmp_idx;
 
 	return 0;
 }
@@ -314,6 +328,7 @@ decl(while_loop) {
 }
 decl(function_call) {
 	auto& node = nodes[idx].Function_Call_;
+
 	auto name = string_view_from_view(file, nodes[node.identifier_idx].Identifier_.token.lexeme);
 	if (name == "print") {
 		expression(
@@ -329,6 +344,14 @@ decl(function_call) {
 		emit(program, IS::Sleep{});
 		return 0;
 	}
+	if (name == "int") {
+		expression(
+			nodes, nodes[node.argument_list_idx].Argument_.value_idx, program, file
+		);
+		emit(program, IS::Int{});
+		return 0;
+	}
+
 
 	auto id = program.interpreter.lookup(name);
 	auto& type = program.interpreter.types.at(id.Identifier_.type_descriptor_id);
@@ -339,15 +362,9 @@ decl(function_call) {
 		size_t arg_type = expression(nodes, param.value_idx, program, file);
 	}
 
-	if (type.kind == AST_Interpreter::Type::Function_Signature_Kind) {
-		size_t bef_stack = program.stack_ptr;
-		expression(nodes, node.identifier_idx, program, file);
-		emit(program, IS::Call_At{bef_stack - old_stack});
-		program.stack_ptr = bef_stack;
-	}
-	emit(program, IS::Call({ id.Identifier_.memory_idx, program.stack_ptr - old_stack }));
-
-
+	size_t bef_stack = program.stack_ptr;
+	expression(nodes, node.identifier_idx, program, file);
+	emit(program, IS::Call_At{bef_stack - old_stack});
 	program.stack_ptr = old_stack;
 
 	if (type.kind == AST_Interpreter::Type::User_Function_Type_Kind) {
@@ -426,21 +443,23 @@ decl(array_access) {
 	return 0;
 }
 
+std::vector<IS::Instruction>* Program::get_current_function() noexcept {
+	auto* f = &code;
+	if (current_function_idx) f = &functions[current_function_idx - 1];
+	return f;
+}
+
 void Program::compile_function(
 	const std::vector<AST::Node>& nodes,
 	size_t idx,
-	std::vector<IS::Instruction>& func,
 	std::string_view file
 ) noexcept {
 	auto& node = nodes[idx].Function_Definition_;
 
 	auto old_memory_stack_ptr = memory_stack_ptr;
-	auto old_function = current_function;
 	defer { memory_stack_ptr = old_memory_stack_ptr; };
-	defer { current_function = old_function; };
 
 	memory_stack_ptr = 0;
-	current_function = &func;
 
 	interpreter.push_scope();
 	interpreter.scopes.back().fence = true;
@@ -469,7 +488,7 @@ void Program::compile_function(
 		statement(nodes, i, *this, file);
 	}
 
-	func.push_back(IS::Ret{});
+	emit(*this, IS::Ret{});
 
 	memory_stack_ptr -= running;
 }
@@ -487,7 +506,9 @@ extern Program compile(
 	emit(program, IS::Exit());
 
 	std::unordered_map<size_t, size_t> map_idx;
+	std::unordered_map<size_t, size_t> map_cst;
 	for (size_t i = 0; i < program.functions.size(); ++i) {
+		map_cst[i] = alloc_constant(program, program.code.size());
 		map_idx[i] = program.code.size();
 		program.code.insert(
 			std::end(program.code),
@@ -499,8 +520,8 @@ extern Program compile(
 	for (auto& x : program.code) {
 		if (x.typecheck(IS::Instruction::Call_Kind))
 			x.Call_.f_idx = map_idx[x.Call_.f_idx];
-		if (x.kind == IS::Instruction::Loadf_Kind)
-			x = IS::Constant{ alloc_constant(program, map_idx[x.Loadf_.memory_ptr]) };
+		if (x.kind == IS::Instruction::Constantf_Kind)
+			x = IS::Constant{ map_cst[x.Constantf_.ptr] };
 	}
 
 	return program;
@@ -581,7 +602,9 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 			BINARY_OP(Mul_Kind, *);
 			BINARY_OP(Div_Kind, /);
 			BINARY_OP(Eq_Kind, ==);
+			BINARY_OP(Neq_Kind, !=);
 			BINARY_OP(Lt_Kind, < );
+			BINARY_OP(Gt_Kind, > );
 			case IS::Instruction::Mod_Kind: {
 				auto b = pop_stack<long double>(stack);
 				auto a = pop_stack<long double>(stack);
@@ -726,6 +749,12 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 				ip = program.code.size();
 				break;
 			}
+			case IS::Instruction::Int_Kind: {
+				auto x = pop_stack<long double>(stack);
+				x = (long double)(long long int)x;
+				push_stack<long double>(x, stack);
+			}
+			default: assert("Not supported"); break;
 		}
 	}
 }

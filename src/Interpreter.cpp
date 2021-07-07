@@ -519,10 +519,12 @@ Value AST_Interpreter::for_loop(AST_Nodes nodes, size_t idx, std::string_view fi
 
 		if (!cond.cast<Bool>().x) break;
 
+		push_scope();
 		for (size_t idx = node.loop_statement_idx; idx; idx = nodes[idx]->next_statement) {
 			auto v = interpret(nodes, idx, file);
 			if (v.typecheck(Value::Return_Call_Kind)) return v;
 		}
+		pop_scope();
 
 		interpret(nodes, node.next_statement_idx, file);
 	}

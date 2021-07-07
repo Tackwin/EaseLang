@@ -13,12 +13,9 @@ main := proc {
 	for (i := step; !flag; i = i + step) {
 		flag = true;
 		for (j := 1; j < n; j = j + 1) {
-			if i % j == 0 {
-			} else {
+			if i % j != 0 {
 				flag = false;
 			}
-		}
-		if (flag) {
 		}
 		print(i);
 	}

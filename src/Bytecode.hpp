@@ -13,6 +13,9 @@ namespace IS {
 	struct Constant {
 		size_t ptr = 0;
 	};
+	struct Constantf {
+		size_t ptr = 0;
+	};
 	struct Push {
 		size_t n = 0;
 	};
@@ -50,6 +53,7 @@ namespace IS {
 	struct If_Jmp_Rel {
 		int dt_ip = 0;
 	};
+	struct Int {};
 	struct Exit {};
 	struct True  {};
 	struct False {};
@@ -59,7 +63,9 @@ namespace IS {
 	struct Add {};
 	struct Sub {};
 	struct Eq {};
+	struct Neq {};
 	struct Lt {};
+	struct Gt {};
 	struct Div {};
 	struct Mul {};
 	struct Mod {};
@@ -68,9 +74,10 @@ namespace IS {
 
 
 	#define IS_LIST(X)\
-	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) \
+	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) X(Neq) \
 	X(Print) X(Push) X(Pop) X(Load) X(Save) X(Alloc) X(Call) X(Ret) \
-	X(Exit) X(Sleep) X(Eq) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At) X(Loadf)
+	X(Exit) X(Sleep) X(Eq) X(Gt) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At) X(Loadf)\
+	X(Constantf) X(Int)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);
@@ -120,7 +127,7 @@ struct Program {
 	std::vector<IS::Instruction> code;
 	std::vector<std::vector<IS::Instruction>> functions;
 
-	std::vector<IS::Instruction>* current_function = &code;
+	size_t current_function_idx = 0;
 	std::unordered_map<size_t, std::string> annotations;
 
 	size_t stack_ptr = 0;
@@ -131,9 +138,9 @@ struct Program {
 	void compile_function(
 		const std::vector<AST::Node>& nodes,
 		size_t idx,
-		std::vector<IS::Instruction>& func,
 		std::string_view file
 	) noexcept;
+	std::vector<IS::Instruction>* get_current_function() noexcept;
 
 	void debug() const noexcept;
 };

@@ -2,12 +2,8 @@ main := proc {
 	is_palindrome := proc(x: real) -> bool {
 		x_ := x;
 		y := 0;
-		m := 0;
-		while x > 0 {
-			m = x % 10;
-			y = y * 10;
-			y = y + m;
-			x = int(x / 10);
+		for (x; x > 0; x = int(x / 10)) {
+			y = y * 10 + (x % 10);
 		}
 		return x_ == y;
 	};
