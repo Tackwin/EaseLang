@@ -227,42 +227,17 @@ struct Parser_State {
 
 		x.condition_idx = expression();
 
-		if (!type_is(Token::Type::Open_Brace)) return 0;
-		i++;
-
 		auto my_scope = ++current_scope;
-		size_t idx = 0;
-
-		if (!type_is(Token::Type::Close_Brace)) {
-			x.if_statement_idx = idx = statement();
-			if (!idx) return 0;
-		}
-		while (!type_is(Token::Type::Close_Brace) && current_scope == my_scope) {
-			idx = exprs.nodes[idx]->next_statement = statement();
-			if (!idx) return 0;
-		}
-		i++;
-		
+		x.if_statement_idx = statement();
+		if (!x.if_statement_idx) return 0;
 		--current_scope;
 
 		if (type_is(Token::Type::Else)) {
 			i++;
 
-			if (!type_is(Token::Type::Open_Brace)) return 0;
-			i++;
-
 			my_scope = ++current_scope;
-
-			if (!type_is(Token::Type::Close_Brace)) {
-				x.else_statement_idx = idx = statement();
-				if (!idx) return 0;
-			}
-			while (!type_is(Token::Type::Close_Brace) && current_scope == my_scope) {
-				idx = exprs.nodes[idx]->next_statement = statement();
-				if (!idx) return 0;
-			}
-			i++;
-
+			x.else_statement_idx = statement();
+			if (!x.else_statement_idx) return 0;
 			--current_scope;
 		}
 
@@ -302,19 +277,9 @@ struct Parser_State {
 		if (!x.next_statement_idx) return 0;
 
 		if (type_is(Token::Type::Close_Paran)) i++;
-		if (!type_is(Token::Type::Open_Brace)) return 0;
-		i++;
 
-		size_t idx = 0;
-		if (!type_is(Token::Type::Close_Brace)) {
-			x.loop_statement_idx = idx = statement();
-			if (!idx) return 0;
-		}
-		while (!type_is(Token::Type::Close_Brace) && current_scope == x.scope + 1){
-			idx = exprs.nodes[idx]->next_statement = statement();
-			if (!idx) return 0;
-		}
-		i++;
+		x.loop_statement_idx = statement();
+		if (!x.loop_statement_idx) return 0;
 
 		ast_return;
 	}
@@ -775,6 +740,22 @@ struct Parser_State {
 			auto idx = while_loop();
 			if (type_is(Token::Type::Semicolon)) i++; // Optional semicolon
 			return idx;
+		} else if (type_is(Token::Type::Open_Brace)) {
+			size_t prev_depth = current_depth;
+			AST::Group_Statement x;
+			x.scope = current_scope;
+			x.depth = current_depth++;
+			defer { current_depth = prev_depth; };
+			i++;
+
+			size_t idx = 0;
+			while (!type_is(Token::Type::Close_Brace)) {
+				if (!idx) idx = x.inner_idx = statement();
+				else      idx = exprs.nodes[idx]->next_statement = statement();
+				if (!idx) break;
+			}
+			i++;
+			ast_return;
 		} else /* assume expression */ {
 			auto idx = expression();
 			if (!type_is(Token::Type::Semicolon)) return 0;

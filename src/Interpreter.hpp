@@ -152,6 +152,7 @@ struct AST_Interpreter {
 	Value list_op      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value factor       (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value group_expr   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
+	Value group_stat   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value identifier   (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value declaration  (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;
 	Value if_call      (AST_Nodes nodes, size_t idx, std::string_view file) noexcept;

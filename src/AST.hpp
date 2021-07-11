@@ -30,6 +30,18 @@ struct AST {
 		}
 	};
 
+	struct Group_Statement : Statement {
+		size_t inner_idx = 0;
+		virtual std::string string(std::string_view str, const AST& expr) const noexcept {
+			std::string res = "";
+			for (size_t idx = inner_idx; idx; idx = expr.nodes[idx]->next_statement) {
+				res += expr.nodes[idx]->string(str, expr) + ";\n";
+			}
+			append_tab(1, res);
+			return std::string("{\n") + res + "}\n";
+		}
+	};
+
 	enum class Operator {
 		Null = 0,
 		Minus,
@@ -402,30 +414,12 @@ struct AST {
 			std::string_view file, const AST& expressions
 		) const noexcept override {
 			std::string res = "if ";
-			res += expressions.nodes[condition_idx]->string(file, expressions) + " {\n";
+			res += expressions.nodes[condition_idx]->string(file, expressions) + " ";
+			res += expressions.nodes[if_statement_idx]->string(file, expressions);
 
-			size_t idx = if_statement_idx;
-			while (idx) {
-				auto str = expressions.nodes[idx]->string(file, expressions) + ";\n";
-				append_tab(1, str);
-				res += str;
-				idx  = expressions.nodes[idx]->next_statement;
-			}
-
-			res += "}";
-
-			idx = else_statement_idx;
-			if (idx) {
-				res += " else {\n";
-
-				while (idx) {
-					auto str = expressions.nodes[idx]->string(file, expressions) + ";\n";
-					append_tab(1, str);
-					res += str;
-					idx  = expressions.nodes[idx]->next_statement;
-				}
-
-				res += "}";
+			if (else_statement_idx) {
+				res += "else ";
+				res += expressions.nodes[else_statement_idx]->string(file, expressions);
 			}
 
 			return res;
@@ -491,6 +485,7 @@ struct AST {
 	#define LIST_AST_TYPE(X)\
 		X(Argument           )\
 		X(Group_Expression   )\
+		X(Group_Statement    )\
 		X(Return_Parameter   )\
 		X(Identifier         )\
 		X(Declaration        )\

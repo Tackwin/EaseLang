@@ -13,10 +13,8 @@ main := proc {
 	for (i := 0; i < 1000; i++) {
 		for (j := i; j < 1000; j++) {
 			m = i * j;
-			if (m > best) {
-				if is_palindrome(m) {
-					best = m;
-				}
+			if (m > best) if is_palindrome(m) {
+				best = m;
 			}
 		}
 	}

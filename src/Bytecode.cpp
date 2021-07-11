@@ -28,6 +28,7 @@ decl(litteral     );
 decl(list_op      );
 decl(unary_op     );
 decl(group_expr   );
+decl(group_stat   );
 decl(if_call      );
 decl(for_loop     );
 decl(while_loop   );
@@ -38,11 +39,12 @@ decl(array_access );
 
 decl(statement) {
 	size_t old_stack = program.stack_ptr;
-	defer {
+	auto ret = expression(nodes, idx, program, file);
+	if (program.stack_ptr != old_stack) {
 		emit(program, IS::Pop{ program.stack_ptr - old_stack });
 		program.stack_ptr = old_stack;
-	};
-	return expression(nodes, idx, program, file);
+	}
+	return ret;
 }
 
 decl(expression) {
@@ -55,6 +57,7 @@ decl(expression) {
 	case AST::Node::Litteral_Kind:            ret = litteral     (nodes, idx, program, file); break;
 	case AST::Node::Operation_List_Kind:      ret = list_op      (nodes, idx, program, file); break;
 	case AST::Node::Unary_Operation_Kind:     ret = unary_op     (nodes, idx, program, file); break;
+	case AST::Node::Group_Statement_Kind:     ret = group_stat   (nodes, idx, program, file); break;
 	case AST::Node::Group_Expression_Kind:    ret = group_expr   (nodes, idx, program, file); break;
 	case AST::Node::If_Kind:                  ret = if_call      (nodes, idx, program, file); break;
 	case AST::Node::For_Kind:                 ret = for_loop     (nodes, idx, program, file); break;
@@ -121,8 +124,8 @@ decl(declaration) {
 				emit(program, IS::Alloc{ t.get_size() });
 				program.memory_stack_ptr += t.get_size();
 				emit(program, IS::Constantf{ program.functions.size() });
-				program.stack_ptr += t.get_size();
 				emit(program, IS::Save({ id.memory_idx, t.get_size() }));
+				emit(program, IS::Pop{ 8 });
 				program.interpreter.new_variable(name, id);
 
 				size_t old_f = program.current_function_idx;
@@ -168,12 +171,12 @@ decl(litteral) {
 	}
 	if (node.token.type == Token::Type::True) {
 		emit(program, IS::True{});
-		program.stack_ptr++;
+		program.stack_ptr += sizeof(long double);
 		return AST_Interpreter::Bool_Type::unique_id;
 	}
 	if (node.token.type == Token::Type::False) {
 		emit(program, IS::False{});
-		program.stack_ptr++;
+		program.stack_ptr += sizeof(long double);
 		return AST_Interpreter::Bool_Type::unique_id;
 	}
 
@@ -207,6 +210,7 @@ decl(list_op) {
 	case AST::Operator::Eq:     emit(program, IS::Eq{}); break;
 	case AST::Operator::Neq:     emit(program, IS::Neq{}); break;
 	case AST::Operator::Lt:     emit(program, IS::Lt{}); break;
+	case AST::Operator::Leq:     emit(program, IS::Leq{}); break;
 	case AST::Operator::Gt:     emit(program, IS::Gt{}); break;
 	case AST::Operator::Mod:     emit(program, IS::Mod{}); break;
 	case AST::Operator::Div:     emit(program, IS::Div{}); break;
@@ -243,6 +247,15 @@ decl(unary_op) {
 decl(group_expr) {
 	return expression(nodes, nodes[idx].Group_Expression_.inner_idx, program, file);
 }
+decl(group_stat) {
+	auto& node = nodes[idx].Group_Statement_;
+
+	program.interpreter.push_scope();
+	defer { program.interpreter.pop_scope(); };
+	for (size_t idx = node.inner_idx; idx; idx = nodes[idx]->next_statement)
+		statement(nodes, idx, program, file);
+	return 0;
+}
 
 
 // CODE
@@ -261,27 +274,20 @@ decl(if_call) {
 	auto cond_type = expression(nodes, node.condition_idx, program, file);
 	program.stack_ptr -= 8;
 
-	program.interpreter.push_scope();
-	defer { program.interpreter.pop_scope(); };
-
 	size_t if_idx = program.get_current_function()->size();
 	emit(program, IS::If_Jmp_Rel({ 2 }));
+	auto jmp_else = program.get_current_function()->size();
 	emit(program, IS::Jmp_Rel({ 0 }));
-	auto jmp_else = program.get_current_function()->size() - 1;
 	emit(program, IS::Pop({ 8 }));
-	for (size_t i = node.if_statement_idx; i; i = nodes[i]->next_statement) {
-		statement(nodes, i, program, file);
-	}
+	statement(nodes, node.if_statement_idx, program, file);
+	auto jmp_out_idx = program.get_current_function()->size();
 	emit(program, IS::Jmp_Rel({ 0 }));
-	auto jmp_out_idx = program.get_current_function()->size() - 1;
 	emit(program, IS::Pop({ 8 }));
 
 	auto jmp_else_offset = program.get_current_function()->size() - jmp_else;
 	program.get_current_function()->at(jmp_else).Jmp_Rel_.dt_ip = jmp_else_offset;
 
-	for (size_t i = node.else_statement_idx; i; i = nodes[i]->next_statement) {
-		statement(nodes, i, program, file);
-	}
+	statement(nodes, node.else_statement_idx, program, file);
 
 	auto jmp_out_offset = program.get_current_function()->size() - jmp_out_idx;
 	program.get_current_function()->at(jmp_out_idx).If_Jmp_Rel_.dt_ip = jmp_out_offset;
@@ -309,10 +315,7 @@ decl(for_loop) {
 	emit(program, IS::Jmp_Rel({ 0 }));
 	emit(program, IS::Pop({ 8 }));
 
-	for (size_t i = node.loop_statement_idx; i; i = nodes[i]->next_statement) {
-		statement(nodes, i, program, file);
-	}
-
+	statement(nodes, node.loop_statement_idx, program, file);
 	statement(nodes, node.next_statement_idx, program, file);
 
 	int dt = (int)top_idx - (int)program.get_current_function()->size();
@@ -604,6 +607,7 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 			BINARY_OP(Eq_Kind, ==);
 			BINARY_OP(Neq_Kind, !=);
 			BINARY_OP(Lt_Kind, < );
+			BINARY_OP(Leq_Kind, <=);
 			BINARY_OP(Gt_Kind, > );
 			case IS::Instruction::Mod_Kind: {
 				auto b = pop_stack<long double>(stack);

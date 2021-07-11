@@ -16,6 +16,7 @@ struct View {
 };
 
 static void append_tab(size_t n, std::string& str) noexcept {
+	if (str.empty()) return;
 	str.insert(0, n, '\t');
 	for (size_t i = 0; i < str.size() - 1; ++i) if (str[i] == '\n') str.insert(i + 1, n, '\t');
 }

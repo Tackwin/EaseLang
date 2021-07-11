@@ -6,10 +6,8 @@ main := proc {
 		if (i % 3 == 0) {
 			sum = sum + i;
 		}
-		else {
-			if (i % 5 == 0) {
-				sum = sum + i;
-			}
+		else if (i % 5 == 0) {
+			sum = sum + i;
 		}
 	}
 

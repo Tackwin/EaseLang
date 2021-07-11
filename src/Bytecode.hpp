@@ -65,6 +65,7 @@ namespace IS {
 	struct Eq {};
 	struct Neq {};
 	struct Lt {};
+	struct Leq {};
 	struct Gt {};
 	struct Div {};
 	struct Mul {};
@@ -77,7 +78,7 @@ namespace IS {
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) X(Neq) \
 	X(Print) X(Push) X(Pop) X(Load) X(Save) X(Alloc) X(Call) X(Ret) \
 	X(Exit) X(Sleep) X(Eq) X(Gt) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At) X(Loadf)\
-	X(Constantf) X(Int)
+	X(Constantf) X(Int) X(Leq)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);

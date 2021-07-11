@@ -1,0 +1,19 @@
+main := proc {
+	sum_of_square := proc (n: real) -> real {
+		sum := 0;
+		for (i := 0; i <= n; i++) sum = sum + i * i;
+		return sum;
+	};
+
+	square_of_sum := proc (n: real) -> real {
+		sum := 0;
+		for (i := 0; i <= n; i++) sum = sum + i;
+		return sum * sum;
+	};
+
+	n := 100;
+	x := square_of_sum(n) - sum_of_square(n);
+	print(x);
+};
+
+main();

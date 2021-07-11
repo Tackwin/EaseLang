@@ -18,6 +18,7 @@ Value AST_Interpreter::interpret(AST_Nodes nodes, size_t idx, std::string_view f
 	case AST::Node::Operation_List_Kind:      return list_op      (nodes, idx, file);
 	case AST::Node::Unary_Operation_Kind:     return unary_op     (nodes, idx, file);
 	case AST::Node::Group_Expression_Kind:    return group_expr   (nodes, idx, file);
+	case AST::Node::Group_Statement_Kind:     return group_stat   (nodes, idx, file);
 	case AST::Node::If_Kind:                  return if_call      (nodes, idx, file);
 	case AST::Node::For_Kind:                 return for_loop     (nodes, idx, file);
 	case AST::Node::While_Kind:               return while_loop   (nodes, idx, file);
@@ -487,15 +488,11 @@ Value AST_Interpreter::if_call(AST_Nodes nodes, size_t idx, std::string_view fil
 	push_scope();
 	defer { pop_scope(); };
 	if (cond.Bool_.x) {
-		for (size_t idx = node.if_statement_idx; idx; idx = nodes[idx]->next_statement) {
-			auto v = interpret(nodes, idx, file);
-			if (v.typecheck(Value::Return_Call_Kind)) return v;
-		}
-	} else {
-		for (size_t idx = node.else_statement_idx; idx; idx = nodes[idx]->next_statement) {
-			auto v = interpret(nodes, idx, file);
-			if (v.typecheck(Value::Return_Call_Kind)) return v;
-		}
+		auto v = interpret(nodes, node.if_statement_idx, file);
+		if (v.typecheck(Value::Return_Call_Kind)) return v;
+	} else if (node.else_statement_idx) {
+		auto v = interpret(nodes, node.else_statement_idx, file);
+		if (v.typecheck(Value::Return_Call_Kind)) return v;
 	}
 
 	return nullptr;
@@ -520,10 +517,8 @@ Value AST_Interpreter::for_loop(AST_Nodes nodes, size_t idx, std::string_view fi
 		if (!cond.cast<Bool>().x) break;
 
 		push_scope();
-		for (size_t idx = node.loop_statement_idx; idx; idx = nodes[idx]->next_statement) {
-			auto v = interpret(nodes, idx, file);
-			if (v.typecheck(Value::Return_Call_Kind)) return v;
-		}
+		auto v = interpret(nodes, node.loop_statement_idx,file);
+		if (v.typecheck(Value::Return_Call_Kind)) return v;
 		pop_scope();
 
 		interpret(nodes, node.next_statement_idx, file);
@@ -910,6 +905,14 @@ Value AST_Interpreter::litteral(AST_Nodes nodes, size_t idx, std::string_view fi
 
 Value AST_Interpreter::group_expr(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
 	return interpret(nodes, nodes[idx].Group_Expression_.inner_idx, file);
+}
+Value AST_Interpreter::group_stat(AST_Nodes nodes, size_t idx, std::string_view file) noexcept {
+	auto& node = nodes[idx].Group_Statement_;
+	for (size_t idx = node.inner_idx; idx; idx = nodes[idx]->next_statement) {
+		auto v = interpret(nodes, idx, file);
+		if (v.kind == Value::Return_Call_Kind) return v;
+	}
+	return nullptr;
 }
 
 void AST_Interpreter::print_value(const Value& value) noexcept {
