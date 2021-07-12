@@ -12,6 +12,7 @@ namespace IS {
 
 	struct Constant {
 		size_t ptr = 0;
+		size_t n = 0;
 	};
 	struct Constantf {
 		size_t ptr = 0;
@@ -27,6 +28,9 @@ namespace IS {
 	};
 	struct Load {
 		size_t memory_ptr = 0;
+		size_t n = 0;
+	};
+	struct Load_At {
 		size_t n = 0;
 	};
 	struct Loadf {
@@ -71,6 +75,7 @@ namespace IS {
 	struct Mul {};
 	struct Mod {};
 	struct Print {};
+	struct Print_Byte {};
 	struct Sleep {};
 
 
@@ -78,7 +83,7 @@ namespace IS {
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) X(Neq) \
 	X(Print) X(Push) X(Pop) X(Load) X(Save) X(Alloc) X(Call) X(Ret) \
 	X(Exit) X(Sleep) X(Eq) X(Gt) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At) X(Loadf)\
-	X(Constantf) X(Int) X(Leq)
+	X(Constantf) X(Int) X(Leq) X(Load_At) X(Print_Byte)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);
@@ -86,7 +91,7 @@ namespace IS {
 		void debug() const noexcept {
 			printf("%-10s", name());
 			if (typecheck(Constant_Kind)) {
-				printf(": const:[%zu]", Constant_.ptr);
+				printf(": const:[%zu], %zu", Constant_.ptr, Constant_.n);
 			}
 			if (typecheck(Push_Kind)) {
 				printf(": %zu", Push_.n);
@@ -111,6 +116,9 @@ namespace IS {
 			}
 			if (typecheck(Load_Kind)) {
 				printf(": mem:[%zu], %zu", Load_.memory_ptr, Load_.n);
+			}
+			if (typecheck(Load_At_Kind)) {
+				printf(": %zu", Load_At_.n);
 			}
 			if (typecheck(Save_Kind)) {
 				printf(": mem:[%zu], %zu", Save_.memory_ptr, Save_.n);

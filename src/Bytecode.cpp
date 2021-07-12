@@ -19,6 +19,14 @@ size_t alloc_constant(Program& prog, long double constant) noexcept {
 	memcpy(prog.data.data() + prog.data.size() - sizeof(constant), &constant, sizeof(constant));
 	return prog.data.size() - sizeof(constant);
 }
+size_t alloc_constant(Program& prog, const std::uint8_t* data, size_t n) noexcept {
+	prog.data.resize(prog.data.size() + n);
+	memcpy(prog.data.data() + prog.data.size() - n, data, 1);
+	return prog.data.size() - n;
+}
+size_t alloc_constant(Program& prog, const char* data, size_t n) noexcept {
+	return alloc_constant(prog, (const std::uint8_t*)data, n);
+}
 
 
 decl(expression   );
@@ -165,7 +173,7 @@ decl(litteral) {
 		char* end_ptr = nullptr;
 		long double x = std::strtold(temp.c_str(), &end_ptr);
 
-		emit(program, IS::Constant{ alloc_constant(program, x) });
+		emit(program, IS::Constant{ alloc_constant(program, x), 8 });
 		program.stack_ptr += sizeof(x);
 		return AST_Interpreter::Real_Type::unique_id;
 	}
@@ -178,6 +186,16 @@ decl(litteral) {
 		emit(program, IS::False{});
 		program.stack_ptr += sizeof(long double);
 		return AST_Interpreter::Bool_Type::unique_id;
+	}
+	if (node.token.type == Token::Type::String) {
+		emit(program, IS::Constant({
+			alloc_constant(program, file.data() + view.i + 1, view.size - 2), view.size - 2
+		}));
+		program.stack_ptr += view.size - 2;
+		return program.interpreter.create_array_type(
+			AST_Interpreter::Byte_Type::unique_id,
+			view.size - 2
+		).get_unique_id();
 	}
 
 	return 0;
@@ -198,22 +216,26 @@ decl(list_op) {
 		// assignement returns the value of the assignee so we evaluate it at the end.
 		return expression(nodes, node.left_idx, program, file);
 	}
+	if (node.op == AST::Operator::As) {
+		expression(nodes, node.left_idx, program, file);
+		return program.interpreter.type_interpret(nodes, node.rest_idx, file).get_unique_id();
+	}
 
 	// >TODO(Tackwin): handle a (op) b (op) c. For now we handle only a (op) b
-	expression(nodes, node.left_idx, program, file);
-	expression(nodes, node.rest_idx, program, file);
+	size_t right_type_id = expression(nodes, node.left_idx, program, file);
+	size_t left_type_id  = expression(nodes, node.rest_idx, program, file);
 
 	switch (node.op) {
 	case AST::Operator::Plus:   emit(program, IS::Add{}); break;
 	case AST::Operator::Minus:  emit(program, IS::Sub{}); break;
 	case AST::Operator::Star:   emit(program, IS::Mul{}); break;
 	case AST::Operator::Eq:     emit(program, IS::Eq{}); break;
-	case AST::Operator::Neq:     emit(program, IS::Neq{}); break;
+	case AST::Operator::Neq:    emit(program, IS::Neq{}); break;
 	case AST::Operator::Lt:     emit(program, IS::Lt{}); break;
-	case AST::Operator::Leq:     emit(program, IS::Leq{}); break;
+	case AST::Operator::Leq:    emit(program, IS::Leq{}); break;
 	case AST::Operator::Gt:     emit(program, IS::Gt{}); break;
-	case AST::Operator::Mod:     emit(program, IS::Mod{}); break;
-	case AST::Operator::Div:     emit(program, IS::Div{}); break;
+	case AST::Operator::Mod:    emit(program, IS::Mod{}); break;
+	case AST::Operator::Div:    emit(program, IS::Div{}); break;
 	default: assert("Not supported"); break;
 	}
 
@@ -223,7 +245,9 @@ decl(list_op) {
 decl(unary_op) {
 	auto& node = nodes[idx].Unary_Operation_;
 
-	expression(nodes, node.right_idx, program, file);
+	size_t right_type = 0;
+	if (node.op != AST::Operator::Amp)
+		right_type = expression(nodes, node.right_idx, program, file);
 
 	switch(node.op) {
 		case AST::Operator::Minus:
@@ -238,6 +262,27 @@ decl(unary_op) {
 			emit(program, IS::Inc{});
 			emit(program, IS::Save({ id.Identifier_.memory_idx, 8 }));
 			return AST_Interpreter::Real_Type::unique_id;
+		}
+		case AST::Operator::Star: {
+			auto ptr_type = program.interpreter.types.at(right_type);
+			assert(ptr_type.kind == AST_Interpreter::Type::Pointer_Type_Kind);
+			auto under_type = program.interpreter.types.at(
+				ptr_type.Pointer_Type_.user_type_descriptor_idx
+			);
+
+			emit(program, IS::Load_At{ under_type.get_size() });
+			program.stack_ptr -= 8;
+			program.stack_ptr += under_type.get_size();
+			return under_type.get_unique_id();
+		}
+		case AST::Operator::Amp: {
+			assert(nodes[node.right_idx].kind == AST::Node::Identifier_Kind);
+			auto& ident = nodes[node.right_idx].Identifier_;
+			auto id = program.interpreter.lookup(string_view_from_view(file, ident.token.lexeme));
+			emit(program, IS::Constant({ alloc_constant(program, id.Identifier_.memory_idx), 8 }));
+			return program.interpreter.create_pointer_type(
+				id.Identifier_.type_descriptor_id
+			).get_unique_id();
 		}
 		default:
 			return 0;
@@ -334,11 +379,19 @@ decl(function_call) {
 
 	auto name = string_view_from_view(file, nodes[node.identifier_idx].Identifier_.token.lexeme);
 	if (name == "print") {
-		expression(
+		size_t arg_type_id = expression(
 			nodes, nodes[node.argument_list_idx].Argument_.value_idx, program, file
 		);
-		emit(program, IS::Print{});
-		return 0;
+		if (
+			program.interpreter.types.at(arg_type_id).get_unique_id() ==
+			AST_Interpreter::Byte_Type::unique_id
+		) {
+			emit(program, IS::Print_Byte{});
+			return 0;
+		} else {
+			emit(program, IS::Print{});
+			return 0;
+		}
 	}
 	if (name == "sleep") {
 		expression(
@@ -524,7 +577,7 @@ extern Program compile(
 		if (x.typecheck(IS::Instruction::Call_Kind))
 			x.Call_.f_idx = map_idx[x.Call_.f_idx];
 		if (x.kind == IS::Instruction::Constantf_Kind)
-			x = IS::Constant{ map_cst[x.Constantf_.ptr] };
+			x = IS::Constant{ map_cst[x.Constantf_.ptr], 8 };
 	}
 
 	return program;
@@ -594,9 +647,11 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 		switch(inst.kind) {
 			case IS::Instruction::None_Kind: break;
 			case IS::Instruction::Constant_Kind: {
+				assert(inst.Constant_.ptr + inst.Constant_.n <= program.data.size());
 				push_stack(
-					*reinterpret_cast<const long double*>(program.data.data() + inst.Constant_.ptr),
-					stack
+					stack,
+					program.data.data() + inst.Constant_.ptr,
+					inst.Constant_.n
 				);
 				break;
 			}
@@ -635,6 +690,11 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 				printf("[%zu] %Lf\n", ip, x);
 				break;
 			}
+			case IS::Instruction::Print_Byte_Kind: {
+				auto x = peek_stack<char>(stack);
+				printf("[%zu] %c\n", ip, x);
+				break;
+			}
 			case IS::Instruction::Sleep_Kind: {
 				auto x = peek_stack<long double>(stack);
 				std::this_thread::sleep_for(
@@ -663,6 +723,15 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 					stack,
 					memory.data() + inst.Load_.memory_ptr + memory_stack_frame.back(),
 					inst.Load_.n
+				);
+				break;
+			}
+			case IS::Instruction::Load_At_Kind: {
+				auto ptr = pop_stack<long double>(stack);
+				push_stack(
+					stack,
+					memory.data() + (size_t)ptr + memory_stack_frame.back(),
+					inst.Load_At_.n
 				);
 				break;
 			}

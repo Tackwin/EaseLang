@@ -57,8 +57,15 @@ struct AST_Interpreter {
 		size_t unique_id = 0;
 		size_t user_type_descriptor_idx = 0;
 	};
-	struct Array_View_Type {
+	struct Array_Type {
 		static constexpr size_t combine_id = 1;
+		size_t unique_id = 0;
+		size_t underlying_id = 0;
+		size_t underlying_size = 0;
+		size_t length = 0;
+	};
+	struct Array_View_Type {
+		static constexpr size_t combine_id = 2;
 		size_t unique_id = 0;
 		size_t user_type_descriptor_idx = 0;
 		size_t length = 0;
@@ -93,7 +100,7 @@ struct AST_Interpreter {
 	#define LIST_LANG_TYPES(X)\
 		X(Nat_Type) X(Real_Type) X(Int_Type) X(User_Struct_Type) X(User_Function_Type)\
 		X(Pointer_Type) X(Array_View_Type) X(Bool_Type) X(Byte_Type) X(Void_Type)\
-		X(Function_Signature)
+		X(Function_Signature) X(Array_Type)
 
 	struct Type {
 		sum_type(Type, LIST_LANG_TYPES);
@@ -108,6 +115,7 @@ struct AST_Interpreter {
 			case Real_Type_Kind: return sizeof(long double);
 			case Pointer_Type_Kind : return sizeof(size_t);
 			case Array_View_Type_Kind   : return sizeof(size_t) + sizeof(size_t);
+			case Array_Type_Kind        : return Array_Type_.underlying_size * Array_Type_.length;
 			case User_Struct_Type_Kind  : return User_Struct_Type_.byte_size;
 			case User_Function_Type_Kind: return User_Function_Type_.byte_size;
 			case Function_Signature_Kind: return Function_Signature_.byte_size;
@@ -124,6 +132,7 @@ struct AST_Interpreter {
 			case Real_Type_Kind         : return Real_Type::unique_id;
 			case Int_Type_Kind          : return Int_Type::unique_id;
 			case Pointer_Type_Kind      : return Pointer_Type_.unique_id;
+			case Array_Type_Kind        : return Array_Type_.unique_id;
 			case Array_View_Type_Kind   : return Array_View_Type_.unique_id;
 			case User_Struct_Type_Kind  : return User_Struct_Type_.unique_id;
 			case Function_Signature_Kind: return Function_Signature_.unique_id;
@@ -174,6 +183,7 @@ struct AST_Interpreter {
 	) noexcept;
 
 	Type  create_pointer_type(size_t underlying) noexcept;
+	Type  create_array_type(size_t underlying, size_t size) noexcept;
 	Type  create_array_view_type(size_t underlying, size_t size) noexcept;
 	Type  type_of(const Value& value) noexcept;
 	Type  type_lookup(std::string_view id) noexcept;

@@ -62,6 +62,7 @@ struct AST {
 		Star,
 		Deref,
 		Dot,
+		As,
 		Function_Call,
 		Array_Call,
 		Or
@@ -87,6 +88,7 @@ struct AST {
 		case Operator::Star:     return "*";
 		case Operator::Deref:    return "*";
 		case Operator::Assign:   return "=";
+		case Operator::As:       return "as";
 		default: return "??";
 		}
 	}

@@ -88,6 +88,7 @@ struct Parser_State {
 			case Token::Type::And:   return AST::Operator::And;
 			case Token::Type::Or:    return AST::Operator::Or;
 			case Token::Type::Dot:   return AST::Operator::Dot;
+			case Token::Type::As:    return AST::Operator::As;
 			default: return AST::Operator::Minus;
 		}
 	}
@@ -448,6 +449,12 @@ struct Parser_State {
 
 		inc_depth(x.left_idx);
 
+		if (x.op == AST::Operator::As) {
+			i++;
+			x.rest_idx = type_identifier();
+			ast_return;
+		}
+
 		size_t idx = 0;
 		while ( type_is(ops[it]) && i++) {
 			size_t t;
@@ -465,6 +472,7 @@ struct Parser_State {
 
 	size_t expression() noexcept {
 		std::vector<TT> least_to_most_precedent = {
+			TT::As,
 			TT::Equal,
 			TT::Or, TT::And,
 			TT::Eq, TT::Neq,

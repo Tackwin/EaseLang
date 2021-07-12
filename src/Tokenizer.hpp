@@ -29,6 +29,7 @@ struct Token {
 		And,
 		Or,
 		Amp,
+		As,
 		Plus,
 		Mod,
 		Inc,

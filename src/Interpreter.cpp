@@ -729,6 +729,18 @@ Type AST_Interpreter::create_array_view_type(size_t underlying, size_t size) noe
 	types[hash] = new_array_view_type;
 	return new_array_view_type;
 }
+Type AST_Interpreter::create_array_type(size_t underlying, size_t size) noexcept {
+	auto hash = hash_combine(underlying, Array_Type::combine_id);
+	hash      = hash_combine(hash, size);
+	if (types.count(hash) != 0) return types.at(hash);
+	Array_Type new_array_type;
+	new_array_type.unique_id = hash;
+	new_array_type.underlying_id = underlying;
+	new_array_type.underlying_size = types.at(underlying).get_size();
+	new_array_type.length = size;
+	types[hash] = new_array_type;
+	return new_array_type;
+}
 
 Type AST_Interpreter::type_ident(
 	AST_Nodes nodes, size_t idx, std::string_view file

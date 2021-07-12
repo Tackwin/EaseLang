@@ -75,6 +75,10 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 			else              { new_token.type = Token::Type::Gt;  i += 1; }
 			break;
 		}
+		case 'a': {
+			if (peek_is('s')) { new_token.type = Token::Type::As;  i += 2; }
+			break;
+		}
 		case '!': {
 			if (peek_is('=')) { new_token.type = Token::Type::Neq; i += 2; }
 			else              { new_token.type = Token::Type::Not; i += 1; }
@@ -107,7 +111,7 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 		} else {
 			new_token.type = Token::Type::Amp; i += 1; break;
 		}
-		case '|': if (peek_is('|')) { new_token.type = Token::Type::Or;  i += 2; break; }
+		case '|': if (peek_is('|')) { new_token.type = Token::Type::Or;  i += 2; } break;
 		default:
 		if (string_comp(i, "return", str)) {
 			new_token.type = Token::Type::Return;
@@ -197,6 +201,7 @@ std::string token_type_to_string(Token::Type type) noexcept {
 		case Token::Type::And: return "And";
 		case Token::Type::Or: return "Or";
 		case Token::Type::Amp: return "Amp";
+		case Token::Type::As: return "As";
 		case Token::Type::Plus: return "Plus";
 		case Token::Type::Mod: return "Mod";
 		case Token::Type::Inc: return "Inc";
