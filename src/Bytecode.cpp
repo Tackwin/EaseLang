@@ -21,7 +21,7 @@ size_t alloc_constant(Program& prog, long double constant) noexcept {
 }
 size_t alloc_constant(Program& prog, const std::uint8_t* data, size_t n) noexcept {
 	prog.data.resize(prog.data.size() + n);
-	memcpy(prog.data.data() + prog.data.size() - n, data, 1);
+	memcpy(prog.data.data() + prog.data.size() - n, data, n);
 	return prog.data.size() - n;
 }
 size_t alloc_constant(Program& prog, const char* data, size_t n) noexcept {
@@ -188,13 +188,17 @@ decl(litteral) {
 		return AST_Interpreter::Bool_Type::unique_id;
 	}
 	if (node.token.type == Token::Type::String) {
+		thread_local std::vector<std::uint8_t> temp_data;
+		temp_data.resize(view.size - 2 + 8);
+		*((long double*)temp_data.data()) = view.size - 2;
+		memcpy(temp_data.data() + 8, file.data() + view.i + 1, view.size - 2);
 		emit(program, IS::Constant({
-			alloc_constant(program, file.data() + view.i + 1, view.size - 2), view.size - 2
+			alloc_constant(program, temp_data.data(), temp_data.size()), temp_data.size()
 		}));
-		program.stack_ptr += view.size - 2;
+		program.stack_ptr += temp_data.size();
 		return program.interpreter.create_array_type(
 			AST_Interpreter::Byte_Type::unique_id,
-			view.size - 2
+			temp_data.size()
 		).get_unique_id();
 	}
 
@@ -217,13 +221,30 @@ decl(list_op) {
 		return expression(nodes, node.left_idx, program, file);
 	}
 	if (node.op == AST::Operator::As) {
-		expression(nodes, node.left_idx, program, file);
-		return program.interpreter.type_interpret(nodes, node.rest_idx, file).get_unique_id();
+		size_t left_type_id = expression(nodes, node.left_idx, program, file);
+		auto rest_type  = program.interpreter.type_interpret(nodes, node.rest_idx, file);
+		auto& left_type = program.interpreter.types.at(left_type_id);
+		if (
+			program.interpreter.types.at(left_type_id).kind ==
+			AST_Interpreter::Type::Pointer_Type_Kind
+		) {
+			return rest_type.get_unique_id();
+		}
+
+		if (
+			left_type.kind == AST_Interpreter::Type::Byte_Type_Kind &&
+			rest_type.kind == AST_Interpreter::Type::Real_Type_Kind
+		) {
+			emit(program, IS::CB2R{});
+			program.stack_ptr += 7;
+		}
+
+		return rest_type.get_unique_id();
 	}
 
 	// >TODO(Tackwin): handle a (op) b (op) c. For now we handle only a (op) b
-	size_t right_type_id = expression(nodes, node.left_idx, program, file);
-	size_t left_type_id  = expression(nodes, node.rest_idx, program, file);
+	size_t left_type_id  = expression(nodes, node.left_idx, program, file);
+	size_t right_type_id = expression(nodes, node.rest_idx, program, file);
 
 	switch (node.op) {
 	case AST::Operator::Plus:   emit(program, IS::Add{}); break;
@@ -240,7 +261,7 @@ decl(list_op) {
 	}
 
 	program.stack_ptr -= sizeof(long double);
-	return AST_Interpreter::Real_Type::unique_id;
+	return left_type_id;
 }
 decl(unary_op) {
 	auto& node = nodes[idx].Unary_Operation_;
@@ -280,6 +301,7 @@ decl(unary_op) {
 			auto& ident = nodes[node.right_idx].Identifier_;
 			auto id = program.interpreter.lookup(string_view_from_view(file, ident.token.lexeme));
 			emit(program, IS::Constant({ alloc_constant(program, id.Identifier_.memory_idx), 8 }));
+			program.stack_ptr += 8;
 			return program.interpreter.create_pointer_type(
 				id.Identifier_.type_descriptor_id
 			).get_unique_id();
@@ -692,7 +714,7 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 			}
 			case IS::Instruction::Print_Byte_Kind: {
 				auto x = peek_stack<char>(stack);
-				printf("[%zu] %c\n", ip, x);
+				printf("%c", x);
 				break;
 			}
 			case IS::Instruction::Sleep_Kind: {
@@ -728,9 +750,10 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 			}
 			case IS::Instruction::Load_At_Kind: {
 				auto ptr = pop_stack<long double>(stack);
+				assert((size_t)ptr <= memory.size());
 				push_stack(
 					stack,
-					memory.data() + (size_t)ptr + memory_stack_frame.back(),
+					memory.data() + (size_t)ptr,
 					inst.Load_At_.n
 				);
 				break;
@@ -791,6 +814,11 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 			}
 			case IS::Instruction::Jmp_Rel_Kind: {
 				ip += inst.Jmp_Rel_.dt_ip - 1;
+				break;
+			}
+			case IS::Instruction::CB2R_Kind: {
+				auto x = pop_stack<std::uint8_t>(stack);
+				push_stack<long double>((long double)x, stack);
 				break;
 			}
 			case IS::Instruction::Ret_Kind: {

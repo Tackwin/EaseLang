@@ -77,13 +77,14 @@ namespace IS {
 	struct Print {};
 	struct Print_Byte {};
 	struct Sleep {};
+	struct CB2R {};
 
 
 	#define IS_LIST(X)\
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) X(Neq) \
 	X(Print) X(Push) X(Pop) X(Load) X(Save) X(Alloc) X(Call) X(Ret) \
 	X(Exit) X(Sleep) X(Eq) X(Gt) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At) X(Loadf)\
-	X(Constantf) X(Int) X(Leq) X(Load_At) X(Print_Byte)
+	X(Constantf) X(Int) X(Leq) X(Load_At) X(Print_Byte) X(CB2R)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);
