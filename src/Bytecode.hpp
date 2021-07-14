@@ -8,6 +8,7 @@
 #include "xstd.hpp"
 #include "Interpreter.hpp"
 
+struct Program;
 namespace IS {
 
 	struct Constant {
@@ -26,15 +27,11 @@ namespace IS {
 	struct Pop {
 		size_t n = 0;
 	};
-	struct Load {
+	struct Stack_Load {
 		size_t memory_ptr = 0;
 		size_t n = 0;
 	};
 	struct Load_At {
-		size_t n = 0;
-	};
-	struct Loadf {
-		size_t memory_ptr = 0;
 		size_t n = 0;
 	};
 	struct Save {
@@ -78,57 +75,19 @@ namespace IS {
 	struct Print_Byte {};
 	struct Sleep {};
 	struct CB2R {};
+	struct Load_Rsp {};
 
 
 	#define IS_LIST(X)\
 	X(Constant) X(Neg) X(Not) X(Add) X(Sub) X(Mul) X(Div) X(True) X(False) X(Neq) \
-	X(Print) X(Push) X(Pop) X(Load) X(Save) X(Alloc) X(Call) X(Ret) \
-	X(Exit) X(Sleep) X(Eq) X(Gt) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At) X(Loadf)\
-	X(Constantf) X(Int) X(Leq) X(Load_At) X(Print_Byte) X(CB2R)
+	X(Print) X(Push) X(Pop) X(Stack_Load) X(Save) X(Alloc) X(Call) X(Ret) \
+	X(Exit) X(Sleep) X(Eq) X(Gt) X(Lt) X(Jmp_Rel) X(If_Jmp_Rel) X(Mod) X(Inc) X(Call_At)\
+	X(Constantf) X(Int) X(Leq) X(Load_At) X(Print_Byte) X(CB2R) X(Load_Rsp)
 
 	struct Instruction {
 		sum_type(Instruction, IS_LIST);
 
-		void debug() const noexcept {
-			printf("%-10s", name());
-			if (typecheck(Constant_Kind)) {
-				printf(": const:[%zu], %zu", Constant_.ptr, Constant_.n);
-			}
-			if (typecheck(Push_Kind)) {
-				printf(": %zu", Push_.n);
-			}
-			if (typecheck(Call_Kind)) {
-				printf(": f:[%zu], %zu", Call_.f_idx, Call_.n);
-			}
-			if (typecheck(Ret_Kind)) {
-				printf(": %zu", Ret_.n);
-			}
-			if (typecheck(Pop_Kind)) {
-				printf(": %zu", Pop_.n);
-			}
-			if (typecheck(Jmp_Rel_Kind)) {
-				printf(": %d", Jmp_Rel_.dt_ip);
-			}
-			if (typecheck(If_Jmp_Rel_Kind)) {
-				printf(": %d", If_Jmp_Rel_.dt_ip);
-			}
-			if (typecheck(Alloc_Kind)) {
-				printf(": %zu", Alloc_.n);
-			}
-			if (typecheck(Load_Kind)) {
-				printf(": mem:[%zu], %zu", Load_.memory_ptr, Load_.n);
-			}
-			if (typecheck(Load_At_Kind)) {
-				printf(": %zu", Load_At_.n);
-			}
-			if (typecheck(Save_Kind)) {
-				printf(": mem:[%zu], %zu", Save_.memory_ptr, Save_.n);
-			}
-		}
-		void debugln() const noexcept {
-			debug();
-			printf("\n");
-		}
+		void debug(const Program& program) const noexcept;
 	};
 };
 

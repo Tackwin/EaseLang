@@ -31,21 +31,34 @@ struct Parser_State {
 	};
 
 	#define ast_return {\
+	x.loc.length = tokens[i].lexeme.i - x.loc.offset;\
 	auto x_idx = exprs.nodes.size();\
 	exprs.nodes.emplace_back(x);\
 	return x_idx;\
 	}
 	#define ast_return_(x) {\
+	x.loc.length = tokens[i].lexeme.i - x.loc.offset;\
 	auto x##_idx = exprs.nodes.size();\
 	exprs.nodes.emplace_back(x);\
 	return x##_idx;\
 	}
+#define ast_begin(t) \
+		t x; \
+		x.scope = current_scope; \
+		x.depth = current_depth++; \
+		x.loc.line = tokens[i].line; \
+		x.loc.offset = tokens[i].lexeme.i; \
+		defer { current_depth--; };
+#define ast_begin_(t, x) \
+		t x; \
+		x.scope = current_scope; \
+		x.depth = current_depth++; \
+		x.loc.line = tokens[i].line; \
+		x.loc.offset = tokens[i].lexeme.i; \
+		defer { current_depth--; };
 
 	size_t return_call() noexcept {
-		AST::Return_Call x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Return_Call);
 
 		if (!type_is(Token::Type::Return)) return 0;
 		i++;
@@ -57,10 +70,7 @@ struct Parser_State {
 	}
 	
 	size_t argument_list() noexcept {
-		AST::Argument x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Argument);
 
 		x.value_idx = expression();
 		if (!x.value_idx) return 0;
@@ -148,10 +158,7 @@ struct Parser_State {
 	};
 
 	size_t return_list() noexcept {
-		AST::Return_Parameter x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Return_Parameter);
 
 		x.type_identifier = type_identifier();
 		if (!x.type_identifier) return 0;
@@ -160,10 +167,7 @@ struct Parser_State {
 	};
 
 	size_t function_definition() noexcept {
-		AST::Function_Definition x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Function_Definition);
 
 		if (!type_is_any({Token::Type::Proc, Token::Type::Method})) return 0;
 		x.is_method = type_is(Token::Type::Method);
@@ -218,10 +222,7 @@ struct Parser_State {
 	};
 
 	size_t if_condition() noexcept {
-		AST::If x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::If);
 
 		if (!type_is(Token::Type::If)) return 0;
 		i++;
@@ -246,14 +247,9 @@ struct Parser_State {
 	}
 
 	size_t for_loop() noexcept {
-
-		AST::For x;
-		x.scope = current_scope++;
-		x.depth = current_depth++;
-		defer {
-			current_scope--;
-			current_depth--;
-		};
+		current_scope++;
+		defer { current_scope--; };
+		ast_begin(AST::For);
 
 		if (!type_is(Token::Type::For)) return 0;
 		i++;
@@ -286,13 +282,9 @@ struct Parser_State {
 	}
 
 	size_t while_loop() noexcept {
-		AST::While x;
-		x.scope = current_scope++;
-		x.depth = current_depth++;
-		defer {
-			current_scope--;
-			current_depth--;
-		};
+		current_scope++;
+		defer { current_scope--; };
+		ast_begin(AST::While);
 
 		if (!type_is(Token::Type::While)) return 0;
 		i++;
@@ -319,10 +311,7 @@ struct Parser_State {
 	}
 
 	size_t string_litteral() noexcept {
-		AST::Litteral x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Litteral);
 
 		if (!type_is(Token::Type::String)) return 0;
 		x.token = tokens[i++];
@@ -331,10 +320,7 @@ struct Parser_State {
 	};
 
 	size_t number_litteral() noexcept {
-		AST::Litteral x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Litteral);
 
 		if (!type_is(Token::Type::Number)) return 0;
 		x.token = tokens[i++];
@@ -343,10 +329,7 @@ struct Parser_State {
 	};
 
 	size_t bool_litteral() noexcept {
-		AST::Litteral x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer{ current_depth--; };
+		ast_begin(AST::Litteral);
 
 		if (!type_is(Token::Type::True) && !type_is(Token::Type::False)) return 0;
 		x.token = tokens[i++];
@@ -368,10 +351,7 @@ struct Parser_State {
 	};
 
 	size_t struct_definition() noexcept {
-		AST::Struct_Definition x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Struct_Definition);
 
 		if (!type_is(Token::Type::Struct)) return 0;
 		i++;
@@ -396,10 +376,7 @@ struct Parser_State {
 	}
 
 	size_t declaration() noexcept {
-		AST::Declaration x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Declaration);
 
 		x.identifier = tokens[i++];
 		if (!type_is(Token::Type::Colon)) return 0;
@@ -427,6 +404,8 @@ struct Parser_State {
 		AST::Operation_List x;
 		x.scope = current_scope;
 		x.depth = current_depth;
+		x.loc.line = tokens[i].line;
+		x.loc.offset = tokens[i].lexeme.i;
 		
 		std::function<void(size_t)> inc_depth;
 		inc_depth = [&] (size_t i) {
@@ -484,10 +463,7 @@ struct Parser_State {
 	}
 
 	size_t unary_operation() noexcept {
-		AST::Unary_Operation x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Unary_Operation);
 
 		if (!is_prefix_unary_op(tokens[i].type)) return 0;
 		x.op = cast_to_op(tokens[i++].type);
@@ -499,10 +475,7 @@ struct Parser_State {
 	}
 
 	size_t initializer_list() noexcept {
-		AST::Initializer_List x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Initializer_List);
 
 		if (type_is(Token::Type::Identifier)) {
 			x.type_identifier = type_identifier();
@@ -555,10 +528,7 @@ struct Parser_State {
 	}
 
 	size_t postfix_operator() noexcept {
-		AST::Unary_Operation x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Unary_Operation);
 
 		x.right_idx = prefix_operator();
 		if (!is_postfix_unary_op(tokens[i].type)) {
@@ -567,6 +537,8 @@ struct Parser_State {
 				y.scope = x.scope;
 				y.depth = x.depth;
 				y.identifier_idx = x.right_idx;
+				y.loc.line = tokens[i].line;
+				y.loc.offset = tokens[i].lexeme.i;
 				y.argument_list_idx = argument_lists();
 				
 				ast_return_(y);
@@ -576,6 +548,8 @@ struct Parser_State {
 				AST::Array_Access y;
 				y.scope = x.scope;
 				y.depth = x.depth;
+				y.loc.line = tokens[i].line;
+				y.loc.offset = tokens[i].lexeme.i;
 				y.identifier_array_idx = x.right_idx;
 				y.identifier_acess_idx = expression();
 
@@ -621,10 +595,7 @@ struct Parser_State {
 
 	size_t type_identifier() noexcept {
 		size_t prev_depth = current_depth;
-		AST::Type_Identifier x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth = prev_depth; };
+		ast_begin(AST::Type_Identifier);
 
 		if (type_is(Token::Type::Proc)) {
 			x.is_proc = true;
@@ -688,6 +659,7 @@ struct Parser_State {
 				x = AST::Type_Identifier();
 				x.scope = current_scope;
 				x.depth = current_depth++;
+				defer{ current_depth--; };
 
 				x.pointer_to = x_idx;
 			}
@@ -714,10 +686,7 @@ struct Parser_State {
 	}
 
 	size_t identifier() noexcept {
-		AST::Identifier x;
-		x.scope = current_scope;
-		x.depth = current_depth++;
-		defer { current_depth--; };
+		ast_begin(AST::Identifier);
 
 		if (!type_is(Token::Type::Identifier)) return 0;
 		x.token = tokens[i++];

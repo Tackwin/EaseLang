@@ -7,10 +7,10 @@
 const std::vector<AST::Node>& nodes, size_t idx, Program& program, std::string_view file\
 ) noexcept
 
-void emit(Program& program, IS::Instruction x) {
+void emit(Program& program, IS::Instruction x, AST::Source_Code_Loc loc) {
 	auto* f = &program.code;
 	if (program.current_function_idx) f = &program.functions[program.current_function_idx - 1];
-	program.annotations[f->size()] = "";
+	// program.annotations[f->size()] = std::string("LOC: ") + std::to_string(loc.line);
 	f->push_back(x);
 }
 
@@ -49,7 +49,7 @@ decl(statement) {
 	size_t old_stack = program.stack_ptr;
 	auto ret = expression(nodes, idx, program, file);
 	if (program.stack_ptr != old_stack) {
-		emit(program, IS::Pop{ program.stack_ptr - old_stack });
+		emit(program, IS::Pop{ program.stack_ptr - old_stack }, nodes[idx]->loc);
 		program.stack_ptr = old_stack;
 	}
 	return ret;
@@ -87,7 +87,7 @@ decl(identifier) {
 	auto id = program.interpreter.lookup(string_view_from_view(file, node.token.lexeme));
 
 	auto& type = program.interpreter.types.at(id.Identifier_.type_descriptor_id);
-	emit(program, IS::Load({ id.Identifier_.memory_idx, type.get_size() }));
+	emit(program, IS::Stack_Load({ id.Identifier_.memory_idx, type.get_size() }), node.loc);
 
 	program.stack_ptr += type.get_size();
 
@@ -109,7 +109,7 @@ decl(declaration) {
 		auto t = program.interpreter.type_interpret(nodes, node.type_expression_idx, file);
 		type_hint = t.get_unique_id();
 		type_hint_size = t.get_size();
-		emit(program, IS::Alloc{ type_hint_size });
+		emit(program, IS::Alloc{ type_hint_size }, node.loc);
 		program.memory_stack_ptr += type_hint_size;
 	}
 
@@ -129,11 +129,10 @@ decl(declaration) {
 				id.memory_idx = program.memory_stack_ptr;
 				id.type_descriptor_id = t.User_Function_Type_.unique_id;
 
-				emit(program, IS::Alloc{ t.get_size() });
+				emit(program, IS::Alloc{ t.get_size() }, node.loc);
 				program.memory_stack_ptr += t.get_size();
-				emit(program, IS::Constantf{ program.functions.size() });
-				emit(program, IS::Save({ id.memory_idx, t.get_size() }));
-				emit(program, IS::Pop{ 8 });
+				emit(program, IS::Constantf{ program.functions.size() }, node.loc);
+				emit(program, IS::Save({ id.memory_idx, t.get_size() }), node.loc);
 				program.interpreter.new_variable(name, id);
 
 				size_t old_f = program.current_function_idx;
@@ -151,13 +150,14 @@ decl(declaration) {
 
 		if (!node.type_expression_idx) {
 			type_hint_size = program.interpreter.types.at(type_hint).get_size();
-			emit(program, IS::Alloc{ type_hint_size });
+			emit(program, IS::Alloc{ type_hint_size }, node.loc);
 			program.memory_stack_ptr += type_hint_size;
 		}
 		id.type_descriptor_id = type_hint;
 	}
 
-	emit(program, IS::Save({ id.memory_idx, type_hint_size }));
+	emit(program, IS::Save({ id.memory_idx, type_hint_size }), node.loc);
+	program.stack_ptr -= type_hint_size;
 	program.interpreter.new_variable(name, id);
 	return 0;
 }
@@ -173,17 +173,17 @@ decl(litteral) {
 		char* end_ptr = nullptr;
 		long double x = std::strtold(temp.c_str(), &end_ptr);
 
-		emit(program, IS::Constant{ alloc_constant(program, x), 8 });
+		emit(program, IS::Constant{ alloc_constant(program, x), 8 }, node.loc);
 		program.stack_ptr += sizeof(x);
 		return AST_Interpreter::Real_Type::unique_id;
 	}
 	if (node.token.type == Token::Type::True) {
-		emit(program, IS::True{});
+		emit(program, IS::True{}, node.loc);
 		program.stack_ptr += sizeof(long double);
 		return AST_Interpreter::Bool_Type::unique_id;
 	}
 	if (node.token.type == Token::Type::False) {
-		emit(program, IS::False{});
+		emit(program, IS::False{}, node.loc);
 		program.stack_ptr += sizeof(long double);
 		return AST_Interpreter::Bool_Type::unique_id;
 	}
@@ -194,7 +194,7 @@ decl(litteral) {
 		memcpy(temp_data.data() + 8, file.data() + view.i + 1, view.size - 2);
 		emit(program, IS::Constant({
 			alloc_constant(program, temp_data.data(), temp_data.size()), temp_data.size()
-		}));
+		}), node.loc);
 		program.stack_ptr += temp_data.size();
 		return program.interpreter.create_array_type(
 			AST_Interpreter::Byte_Type::unique_id,
@@ -213,8 +213,11 @@ decl(list_op) {
 
 		auto& ident = nodes[node.left_idx].Identifier_;
 		auto id = program.interpreter.lookup(string_view_from_view(file, ident.token.lexeme));
-		emit(program, IS::Save({ id.Identifier_.memory_idx, program.stack_ptr - before_stack }));
-		emit(program, IS::Pop{ program.stack_ptr - before_stack });
+		emit(
+			program,
+			IS::Save({ id.Identifier_.memory_idx, program.stack_ptr - before_stack }),
+			node.loc
+		);
 		program.stack_ptr = before_stack;
 
 		// assignement returns the value of the assignee so we evaluate it at the end.
@@ -235,7 +238,7 @@ decl(list_op) {
 			left_type.kind == AST_Interpreter::Type::Byte_Type_Kind &&
 			rest_type.kind == AST_Interpreter::Type::Real_Type_Kind
 		) {
-			emit(program, IS::CB2R{});
+			emit(program, IS::CB2R{}, node.loc);
 			program.stack_ptr += 7;
 		}
 
@@ -247,16 +250,16 @@ decl(list_op) {
 	size_t right_type_id = expression(nodes, node.rest_idx, program, file);
 
 	switch (node.op) {
-	case AST::Operator::Plus:   emit(program, IS::Add{}); break;
-	case AST::Operator::Minus:  emit(program, IS::Sub{}); break;
-	case AST::Operator::Star:   emit(program, IS::Mul{}); break;
-	case AST::Operator::Eq:     emit(program, IS::Eq{}); break;
-	case AST::Operator::Neq:    emit(program, IS::Neq{}); break;
-	case AST::Operator::Lt:     emit(program, IS::Lt{}); break;
-	case AST::Operator::Leq:    emit(program, IS::Leq{}); break;
-	case AST::Operator::Gt:     emit(program, IS::Gt{}); break;
-	case AST::Operator::Mod:    emit(program, IS::Mod{}); break;
-	case AST::Operator::Div:    emit(program, IS::Div{}); break;
+	case AST::Operator::Plus:   emit(program, IS::Add{}, node.loc); break;
+	case AST::Operator::Minus:  emit(program, IS::Sub{}, node.loc); break;
+	case AST::Operator::Star:   emit(program, IS::Mul{}, node.loc); break;
+	case AST::Operator::Eq:     emit(program, IS::Eq{}, node.loc); break;
+	case AST::Operator::Neq:    emit(program, IS::Neq{}, node.loc); break;
+	case AST::Operator::Lt:     emit(program, IS::Lt{}, node.loc); break;
+	case AST::Operator::Leq:    emit(program, IS::Leq{}, node.loc); break;
+	case AST::Operator::Gt:     emit(program, IS::Gt{}, node.loc); break;
+	case AST::Operator::Mod:    emit(program, IS::Mod{}, node.loc); break;
+	case AST::Operator::Div:    emit(program, IS::Div{}, node.loc); break;
 	default: assert("Not supported"); break;
 	}
 
@@ -272,17 +275,18 @@ decl(unary_op) {
 
 	switch(node.op) {
 		case AST::Operator::Minus:
-			emit(program, IS::Neg{});
+			emit(program, IS::Neg{}, node.loc);
 			return AST_Interpreter::Real_Type::unique_id;
 		case AST::Operator::Not:
-			emit(program, IS::Not{});
+			emit(program, IS::Not{}, node.loc);
 			return AST_Interpreter::Bool_Type::unique_id;
 		case AST::Operator::Inc: {
 			auto& ident = nodes[node.right_idx].Identifier_;
 			auto id = program.interpreter.lookup(string_view_from_view(file, ident.token.lexeme));
-			emit(program, IS::Inc{});
-			emit(program, IS::Save({ id.Identifier_.memory_idx, 8 }));
-			return AST_Interpreter::Real_Type::unique_id;
+			emit(program, IS::Inc{}, node.loc);
+			emit(program, IS::Save({ id.Identifier_.memory_idx, 8 }), node.loc);
+			program.stack_ptr -= 8;
+			return AST_Interpreter::Void_Type::unique_id;
 		}
 		case AST::Operator::Star: {
 			auto ptr_type = program.interpreter.types.at(right_type);
@@ -291,7 +295,7 @@ decl(unary_op) {
 				ptr_type.Pointer_Type_.user_type_descriptor_idx
 			);
 
-			emit(program, IS::Load_At{ under_type.get_size() });
+			emit(program, IS::Load_At{ under_type.get_size() }, node.loc);
 			program.stack_ptr -= 8;
 			program.stack_ptr += under_type.get_size();
 			return under_type.get_unique_id();
@@ -300,7 +304,13 @@ decl(unary_op) {
 			assert(nodes[node.right_idx].kind == AST::Node::Identifier_Kind);
 			auto& ident = nodes[node.right_idx].Identifier_;
 			auto id = program.interpreter.lookup(string_view_from_view(file, ident.token.lexeme));
-			emit(program, IS::Constant({ alloc_constant(program, id.Identifier_.memory_idx), 8 }));
+			emit(program, IS::Load_Rsp{}, node.loc);
+			emit(
+				program,
+				IS::Constant({ alloc_constant(program, id.Identifier_.memory_idx), 8 }),
+				node.loc
+			);
+			emit(program, IS::Add{}, node.loc);
 			program.stack_ptr += 8;
 			return program.interpreter.create_pointer_type(
 				id.Identifier_.type_descriptor_id
@@ -342,14 +352,14 @@ decl(if_call) {
 	program.stack_ptr -= 8;
 
 	size_t if_idx = program.get_current_function()->size();
-	emit(program, IS::If_Jmp_Rel({ 2 }));
+	emit(program, IS::If_Jmp_Rel({ 2 }), node.loc);
 	auto jmp_else = program.get_current_function()->size();
-	emit(program, IS::Jmp_Rel({ 0 }));
-	emit(program, IS::Pop({ 8 }));
+	emit(program, IS::Jmp_Rel({ 0 }), node.loc);
+	emit(program, IS::Pop({ 8 }), node.loc);
 	statement(nodes, node.if_statement_idx, program, file);
 	auto jmp_out_idx = program.get_current_function()->size();
-	emit(program, IS::Jmp_Rel({ 0 }));
-	emit(program, IS::Pop({ 8 }));
+	emit(program, IS::Jmp_Rel({ 0 }), node.loc);
+	emit(program, IS::Pop({ 8 }), node.loc);
 
 	auto jmp_else_offset = program.get_current_function()->size() - jmp_else;
 	program.get_current_function()->at(jmp_else).Jmp_Rel_.dt_ip = jmp_else_offset;
@@ -376,17 +386,17 @@ decl(for_loop) {
 	size_t top_idx = program.get_current_function()->size();
 	expression(nodes, node.cond_statement_idx, program, file);
 	program.stack_ptr -= 8;
-	emit(program, IS::If_Jmp_Rel({ 3 }));
-	emit(program, IS::Pop({ 8 }));
+	emit(program, IS::If_Jmp_Rel({ 3 }), node.loc);
+	emit(program, IS::Pop({ 8 }), node.loc);
 	size_t jmp_idx = program.get_current_function()->size();
-	emit(program, IS::Jmp_Rel({ 0 }));
-	emit(program, IS::Pop({ 8 }));
+	emit(program, IS::Jmp_Rel({ 0 }), node.loc);
+	emit(program, IS::Pop({ 8 }), node.loc);
 
 	statement(nodes, node.loop_statement_idx, program, file);
 	statement(nodes, node.next_statement_idx, program, file);
 
 	int dt = (int)top_idx - (int)program.get_current_function()->size();
-	emit(program, IS::Jmp_Rel({ dt }));
+	emit(program, IS::Jmp_Rel({ dt }), node.loc);
 
 	program.get_current_function()->at(jmp_idx).Jmp_Rel_.dt_ip =
 		program.get_current_function()->size() - jmp_idx;
@@ -408,10 +418,10 @@ decl(function_call) {
 			program.interpreter.types.at(arg_type_id).get_unique_id() ==
 			AST_Interpreter::Byte_Type::unique_id
 		) {
-			emit(program, IS::Print_Byte{});
+			emit(program, IS::Print_Byte{}, node.loc);
 			return 0;
 		} else {
-			emit(program, IS::Print{});
+			emit(program, IS::Print{}, node.loc);
 			return 0;
 		}
 	}
@@ -419,14 +429,14 @@ decl(function_call) {
 		expression(
 			nodes, nodes[node.argument_list_idx].Argument_.value_idx, program, file
 		);
-		emit(program, IS::Sleep{});
+		emit(program, IS::Sleep{}, node.loc);
 		return 0;
 	}
 	if (name == "int") {
 		expression(
 			nodes, nodes[node.argument_list_idx].Argument_.value_idx, program, file
 		);
-		emit(program, IS::Int{});
+		emit(program, IS::Int{}, node.loc);
 		return 0;
 	}
 
@@ -442,7 +452,7 @@ decl(function_call) {
 
 	size_t bef_stack = program.stack_ptr;
 	expression(nodes, node.identifier_idx, program, file);
-	emit(program, IS::Call_At{bef_stack - old_stack});
+	emit(program, IS::Call_At{bef_stack - old_stack}, node.loc);
 	program.stack_ptr = old_stack;
 
 	if (type.kind == AST_Interpreter::Type::User_Function_Type_Kind) {
@@ -476,7 +486,7 @@ decl(return_call) {
 		to_return += program.interpreter.types.at(ret_type).get_size();
 	}
 
-	emit(program, IS::Ret{ to_return });
+	emit(program, IS::Ret{ to_return }, node.loc);
 	return 0;
 }
 decl(init_list) {
@@ -499,7 +509,7 @@ decl(init_list) {
 
 	// We alloc enough size to hold the type that we got
 	size_t type_size = program.interpreter.types.at(new_id.type_descriptor_id).get_size();
-	emit(program, IS::Alloc{type_size});
+	emit(program, IS::Alloc{type_size}, node.loc);
 
 	size_t running_ptr = 0;
 
@@ -511,9 +521,10 @@ decl(init_list) {
 		size_t type_idx = expression(nodes, i, program, file);
 		size_t running_type_size = program.interpreter.types.at(type_idx).get_size();
 
-		emit(program, IS::Save({ new_id.memory_idx + running_ptr, running_type_size }));
 		running_ptr += running_type_size;
 	}
+	emit(program, IS::Save({ new_id.memory_idx, running_ptr }), node.loc);
+	program.stack_ptr -= running_ptr;
 
 	return new_id.type_descriptor_id;
 }
@@ -566,7 +577,7 @@ void Program::compile_function(
 		statement(nodes, i, *this, file);
 	}
 
-	emit(*this, IS::Ret{});
+	emit(*this, IS::Ret{}, {});
 
 	memory_stack_ptr -= running;
 }
@@ -581,7 +592,7 @@ extern Program compile(
 		statement(nodes, idx, program, file);
 	}
 
-	emit(program, IS::Exit());
+	emit(program, IS::Exit(), {});
 
 	std::unordered_map<size_t, size_t> map_idx;
 	std::unordered_map<size_t, size_t> map_cst;
@@ -607,19 +618,63 @@ extern Program compile(
 
 void Program::debug() const noexcept {
 	for (size_t i = 0; i < code.size(); ++i) {
-		printf(">% 5d ", i);
-		code[i].debug();
-		if (annotations.count(i)) printf("%-100s", annotations.at(i).c_str());
+		printf(">% 5d ", (int)i);
+		if (annotations.count(i)) printf("| %-100s |", annotations.at(i).c_str());
+		code[i].debug(*this);
 		printf("\n");
 	}
 }
 
+void IS::Instruction::debug(const Program& program) const noexcept {
+	printf("%-10s", name());
+	if (typecheck(Constant_Kind)) {
+		printf(
+			": const:[%zu](%llf), %zu",
+			Constant_.ptr,
+			*(long double*)(program.data.data() + Constant_.ptr),
+			Constant_.n
+		);
+	}
+	if (typecheck(Push_Kind)) {
+		printf(": %zu", Push_.n);
+	}
+	if (typecheck(Call_Kind)) {
+		printf(": f:[%zu], %zu", Call_.f_idx, Call_.n);
+	}
+	if (typecheck(Ret_Kind)) {
+		printf(": %zu", Ret_.n);
+	}
+	if (typecheck(Pop_Kind)) {
+		printf(": %zu", Pop_.n);
+	}
+	if (typecheck(Jmp_Rel_Kind)) {
+		printf(": %d", Jmp_Rel_.dt_ip);
+	}
+	if (typecheck(If_Jmp_Rel_Kind)) {
+		printf(": %d", If_Jmp_Rel_.dt_ip);
+	}
+	if (typecheck(Alloc_Kind)) {
+		printf(": %zu", Alloc_.n);
+	}
+	if (typecheck(Stack_Load_Kind)) {
+		printf(": stack:[%zu], %zu", Stack_Load_.memory_ptr, Stack_Load_.n);
+	}
+	if (typecheck(Load_At_Kind)) {
+		printf(": %zu", Load_At_.n);
+	}
+	if (typecheck(Save_Kind)) {
+		printf(": mem:[%zu], %zu", Save_.memory_ptr, Save_.n);
+	}
+}
 
 template<typename T>
 T pop_stack(std::vector<std::uint8_t>& stack) noexcept {
 	T x = *reinterpret_cast<T*>(stack.data() + stack.size() - sizeof(T));
 	stack.resize(stack.size() - sizeof(T));
 	return x;
+}
+void pop_stack(std::vector<std::uint8_t>& stack, size_t n) noexcept {
+	stack.resize(stack.size() - n);
 }
 template<typename T>
 T peek_stack(std::vector<std::uint8_t>& stack) noexcept {
@@ -740,11 +795,11 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 				stack.resize(stack.size() - inst.Pop_.n);
 				break;
 			}
-			case IS::Instruction::Load_Kind: {
+			case IS::Instruction::Stack_Load_Kind: {
 				push_stack(
 					stack,
-					memory.data() + inst.Load_.memory_ptr + memory_stack_frame.back(),
-					inst.Load_.n
+					memory.data() + inst.Stack_Load_.memory_ptr + memory_stack_frame.back(),
+					inst.Stack_Load_.n
 				);
 				break;
 			}
@@ -768,6 +823,7 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 					stack.data() + stack.size() - inst.Save_.n,
 					inst.Save_.n
 				);
+				pop_stack(stack, inst.Save_.n);
 				break;
 			}
 			case IS::Instruction::Alloc_Kind: {
@@ -846,6 +902,10 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 
 				break;
 			}
+			case IS::Instruction::Load_Rsp_Kind: {
+				push_stack<long double>(memory_stack_frame.back(), stack);
+				break;
+			}
 			case IS::Instruction::Exit_Kind: {
 				ip = program.code.size();
 				break;
@@ -854,6 +914,7 @@ void Bytecode_VM::execute(const Program& program) noexcept {
 				auto x = pop_stack<long double>(stack);
 				x = (long double)(long long int)x;
 				push_stack<long double>(x, stack);
+				break;
 			}
 			default: assert("Not supported"); break;
 		}

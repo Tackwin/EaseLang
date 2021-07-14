@@ -11,6 +11,12 @@
 #include "Tokenizer.hpp"
 
 struct AST {
+	struct Source_Code_Loc {
+		size_t line   = 0;
+		size_t offset = 0;
+		size_t length = 0;
+	};
+
 	struct Statement {
 		virtual std::string string(std::string_view, const AST& expressions) const noexcept
 		{
@@ -20,6 +26,8 @@ struct AST {
 		size_t depth          = 0;
 		size_t scope          = 0;
 		size_t next_statement = 0;
+
+		Source_Code_Loc loc;
 	};
 
 	struct Group_Expression : Statement {
