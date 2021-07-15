@@ -1,0 +1,17 @@
+main := proc {
+	is_triple := proc(a: real, b: real, c: real) -> bool {
+		return (a * a + b * b) == c * c;
+	};
+
+	for (a := 0; a < 1000; a++)
+	for (b := a + 1; b < 1000; b++)
+	for (c := b + 1; c < 1000; c++)
+	if (a + b) + c == 1000 {
+		if is_triple(a, b, c) {
+			print((a * b) * c);
+		}
+	}
+
+};
+
+main();

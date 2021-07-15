@@ -75,10 +75,6 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 			else              { new_token.type = Token::Type::Gt;  i += 1; }
 			break;
 		}
-		case 'a': {
-			if (peek_is('s')) { new_token.type = Token::Type::As;  i += 2; }
-			break;
-		}
 		case '!': {
 			if (peek_is('=')) { new_token.type = Token::Type::Neq; i += 2; }
 			else              { new_token.type = Token::Type::Not; i += 1; }
@@ -116,6 +112,10 @@ std::vector<Token> tokenize(std::string_view str) noexcept {
 		if (string_comp(i, "return", str)) {
 			new_token.type = Token::Type::Return;
 			i += 6;
+		}
+		else if (string_comp(i, "as", str)) {
+			new_token.type = Token::Type::As;
+			i += 2;
 		}
 		else if (string_comp(i, "struct", str)) {
 			new_token.type = Token::Type::Struct;
